@@ -47,21 +47,21 @@ pub fn check_validation_layer_support(
     let supported_layers = entry
         .enumerate_instance_layer_properties()
         .expect("Failed to get instance layer properties");
-    let required_hash_set = HashSet::<&CStr>::from_iter(
+    let required_hash_set = HashSet::<String>::from_iter(
         required_validation_layers
             .iter()
-            .map(|&layer| unsafe { CStr::from_ptr(layer.as_ptr() as *const i8) })
-            .collect::<Vec<&CStr>>(),
+            .map(|&layer| layer.to_string())
+            .collect::<Vec<String>>(),
     );
-    let supported_hash_set = &HashSet::<&CStr>::from_iter(
+    let supported_hash_set = &HashSet::<String>::from_iter(
         supported_layers
             .iter()
-            .map(|layer| unsafe { CStr::from_ptr(layer.layer_name.as_ptr()) })
-            .collect::<Vec<&CStr>>(),
+            .map(|layer| super::char_array_to_string(&layer.layer_name))
+            .collect::<Vec<String>>(),
     );
     let missing_layers = required_hash_set
         .difference(supported_hash_set)
-        .collect::<Vec<&&CStr>>();
+        .collect::<Vec<&String>>();
 
     if missing_layers.len() > 0 {
         log::error!(
@@ -75,7 +75,7 @@ pub fn check_validation_layer_support(
 }
 
 /// Creates and sets up the Vulkan debug messenger and loader
-/// 
+///
 /// Returns the debug utils loader and messenger
 pub fn setup_debug_utils(
     entry: &ash::Entry,
@@ -95,7 +95,7 @@ pub fn setup_debug_utils(
                 | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
         )
         .pfn_user_callback(Some(vulkan_debug_utils_callback));
-    
+
     let debug_messenger = unsafe {
         debug_utils_loader
             .create_debug_utils_messenger(&debug_info, None)
