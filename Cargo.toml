@@ -3,6 +3,27 @@ name = "magma"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["use-compiled-tools"]
+use-installed-tools = ["spirv-builder/use-installed-tools"]
+use-compiled-tools = ["spirv-builder/use-compiled-tools"]
 
 [dependencies]
+ash = "0.36.0"
+log = "0.4.14"
+winit = "0.26.1"
+cgmath = "0.18.0"
+image = "0.24.1"
+memoffset = "0.6.5"
+tobj = "3.2.1"
+thiserror = "1.0.30"
+spirv-builder = { git = "https://github.com/EmbarkStudios/rust-gpu", default-features=false }
+
+[dev-dependencies]
+simple_logger = "2.1.0"
+anyhow = "1.0.56"
+
+[workspace]
+members = [
+    "shaders/simple-shader"
+]
