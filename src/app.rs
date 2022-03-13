@@ -20,6 +20,12 @@ pub struct App {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkInstance.html
     instance: ash::Instance,
+    /// Manages the debug_messenger
+    debug_utils_loader: ash::extensions::ext::DebugUtils,
+    /// Handle to Vulkan debug messenger
+    /// 
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDebugUtilsMessengerEXT.html
+    debug_messenger: vk::DebugUtilsMessengerEXT,
 }
 
 impl App {
@@ -29,10 +35,14 @@ impl App {
     pub fn new() -> App {
         let entry = unsafe { ash::Entry::load().expect("Failed to load Vulkan library") };
         let instance = App::create_instance(&entry);
+        let (debug_utils_loader, debug_messenger) =
+            utils::debug::setup_debug_utils(&entry, &instance);
 
         App {
             _entry: entry,
             instance,
+            debug_utils_loader,
+            debug_messenger,
         }
     }
 
@@ -41,7 +51,16 @@ impl App {
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkInstance.html
     fn create_instance(entry: &ash::Entry) -> ash::Instance {
         let required_extension_names = utils::platforms::required_extension_names();
-        App::check_has_required_extensions(entry, &required_extension_names);
+        if !App::check_required_extensions(entry, &required_extension_names) {
+            panic!("Missing extensions, see above");
+        }
+
+        if !utils::debug::check_validation_layer_support(
+            entry,
+            &utils::constants::VALIDATION_LAYERS,
+        ) {
+            panic!("Missing layers, see above");
+        }
 
         let app_name = CString::new(WINDOW_TITLE).unwrap();
         let engine_name = CString::new("Magma").unwrap();
@@ -49,9 +68,18 @@ impl App {
             .application_name(&app_name)
             .engine_name(&engine_name);
 
+        let enabled_layer_names = if utils::constants::ENABLE_VALIDATION_LAYERS {
+            Vec::new()
+        } else {
+            utils::constants::VALIDATION_LAYERS
+                .iter()
+                .map(|layer| layer.as_ptr() as *const i8)
+                .collect::<Vec<*const i8>>()
+        };
         let create_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
-            .enabled_extension_names(&required_extension_names);
+            .enabled_extension_names(&required_extension_names)
+            .enabled_layer_names(&enabled_layer_names);
 
         unsafe {
             entry
@@ -60,11 +88,13 @@ impl App {
         }
     }
 
-    /// Checks if the Vulkan instance supports all the extensions we require, panicking if not
-    fn check_has_required_extensions(
+    /// Checks if the Vulkan instance supports all the extensions we require
+    ///
+    /// Returns whether or not all required extensions are supported
+    fn check_required_extensions(
         entry: &ash::Entry,
         required_extension_names: &Vec<*const i8>,
-    ) {
+    ) -> bool {
         let supported_extension_names = entry
             .enumerate_instance_extension_properties(None)
             .expect("Failed to get instance extension properties");
@@ -89,8 +119,10 @@ impl App {
                 "Your device is missing required features: {:?}",
                 missing_extensions
             );
-            panic!("Missing extensions, see above")
+            return false;
         }
+
+        true
     }
 
     /// Initialises a winit window, returning the initialised window
@@ -124,6 +156,9 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            if utils::constants::ENABLE_VALIDATION_LAYERS {
+                self.debug_utils_loader.destroy_debug_utils_messenger(self.debug_messenger, None);
+            }
             self.instance.destroy_instance(None);
         };
     }
