@@ -1,4 +1,1 @@
-pub fn hello() {
-    log::info!("Hello, world!");
-}
-
+pub mod app;

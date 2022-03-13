@@ -1,14 +1,14 @@
+use winit::event_loop::EventLoop;
+
 fn main() -> anyhow::Result<()> {
     simple_logger::SimpleLogger::new()
         .without_timestamps()
         .init()
         .unwrap();
 
-    let _shader = spirv_builder::SpirvBuilder::new("shaders/simple-shader", "spirv-unknown-vulkan1.1")
-        .print_metadata(spirv_builder::MetadataPrintout::None)
-        .build()?;
-    
-    magma::hello();
+    let event_loop = EventLoop::new();
+    let _window = magma::app::App::init_window(&event_loop);
+    magma::app::App::main_loop(event_loop);
 
     Ok(())
 }
