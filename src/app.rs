@@ -140,6 +140,8 @@ pub struct App {
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageView.html
     swapchain_image_views: Vec<vk::ImageView>,
 
+    /// Handle to Vulkan render pass being used by the graphics pipeline
+    render_pass: vk::RenderPass,
     /// Handle to Vulkan pipeline layout used by the graphics pipeline
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPipelineLayout.html
@@ -177,6 +179,7 @@ impl App {
         let swapchain_image_views =
             App::create_image_views(&device, swapchain.format, &swapchain.images);
 
+        let render_pass = App::create_render_pass(&device, swapchain.format);
         let pipeline_layout = App::create_graphics_pipeline(&device, swapchain.extent);
 
         App {
@@ -191,6 +194,7 @@ impl App {
             _present_queue: present_queue,
             _swapchain: swapchain,
             swapchain_image_views,
+            render_pass,
             pipeline_layout,
         }
     }
@@ -808,6 +812,38 @@ impl App {
         ))
     }
 
+    /// Creates a new render pass for a graphics pipeline
+    fn create_render_pass(device: &ash::Device, surface_format: vk::Format) -> vk::RenderPass {
+        let color_attachment = vk::AttachmentDescription::builder()
+            .format(surface_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .build();
+
+        let color_attachment_ref = [vk::AttachmentReference {
+            attachment: 0,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        }];
+
+        let subpasses = [vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .build()];
+
+        let render_pass_attachments = [color_attachment];
+        let render_pass_info = vk::RenderPassCreateInfo::builder()
+            .attachments(&render_pass_attachments)
+            .subpasses(&subpasses);
+        
+        unsafe {
+            device.create_render_pass(&render_pass_info, None).expect("Failed to create render pass")
+        }
+    }
+
     /// Initialises a winit window, returning the initialised window
     pub fn init_window(event_loop: &EventLoop<()>) -> Window {
         WindowBuilder::new()
@@ -845,6 +881,7 @@ impl Drop for App {
 
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_render_pass(self.render_pass, None);
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
 
