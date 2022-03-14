@@ -146,6 +146,10 @@ pub struct App {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPipelineLayout.html
     pipeline_layout: vk::PipelineLayout,
+    /// Handle to Vulkan pipeline being used as a graphics pipeline
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPipeline.html
+    graphics_pipeline: vk::Pipeline,
 }
 
 impl App {
@@ -180,7 +184,8 @@ impl App {
             App::create_image_views(&device, swapchain.format, &swapchain.images);
 
         let render_pass = App::create_render_pass(&device, swapchain.format);
-        let pipeline_layout = App::create_graphics_pipeline(&device, swapchain.extent);
+        let (graphics_pipeline, pipeline_layout) =
+            App::create_graphics_pipeline(&device, render_pass, swapchain.extent);
 
         App {
             _entry: entry,
@@ -196,6 +201,7 @@ impl App {
             swapchain_image_views,
             render_pass,
             pipeline_layout,
+            graphics_pipeline,
         }
     }
 
@@ -681,27 +687,30 @@ impl App {
     /// Creates a new Vulkan graphics pipeline
     fn create_graphics_pipeline(
         device: &ash::Device,
+        render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
-    ) -> vk::PipelineLayout {
+    ) -> (vk::Pipeline, vk::PipelineLayout) {
         let shader_code = App::read_shader_code("shaders/simple-shader");
         let shader_module = App::create_shader_module(device, shader_code);
 
-        let _shader_stages = [
+        let shader_stages = [
             vk::PipelineShaderStageCreateInfo::builder()
                 .module(shader_module)
                 .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main_vs\0") })
-                .stage(vk::ShaderStageFlags::VERTEX),
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .build(),
             vk::PipelineShaderStageCreateInfo::builder()
                 .module(shader_module)
                 .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main_fs\0") })
-                .stage(vk::ShaderStageFlags::FRAGMENT),
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
         ];
 
-        let _vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
+        let vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_attribute_descriptions(&[])
             .vertex_binding_descriptions(&[]);
 
-        let _vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
+        let vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
             .primitive_restart_enable(false)
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
 
@@ -719,11 +728,11 @@ impl App {
             extent: swapchain_extent,
         }];
 
-        let _viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
+        let viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
             .scissors(&scissors)
             .viewports(&viewports);
 
-        let _rasterization_state_info = vk::PipelineRasterizationStateCreateInfo::builder()
+        let rasterization_state_info = vk::PipelineRasterizationStateCreateInfo::builder()
             .depth_clamp_enable(false)
             .cull_mode(vk::CullModeFlags::BACK)
             .front_face(vk::FrontFace::CLOCKWISE)
@@ -748,7 +757,7 @@ impl App {
             .reference(0)
             .build();
 
-        let _depth_state_info = vk::PipelineDepthStencilStateCreateInfo::builder()
+        let depth_state_info = vk::PipelineDepthStencilStateCreateInfo::builder()
             .depth_test_enable(false)
             .depth_write_enable(false)
             .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
@@ -761,7 +770,7 @@ impl App {
             .blend_enable(false)
             .build()];
 
-        let _color_blend_state_info = vk::PipelineColorBlendStateCreateInfo::builder()
+        let color_blend_state_info = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
             .attachments(&color_blend_attachment_states)
             .blend_constants([0.0, 0.0, 0.0, 0.0]);
@@ -776,11 +785,35 @@ impl App {
                 .expect("Failed to create pipeline layout")
         };
 
+        let graphics_pipeline_infos = [vk::GraphicsPipelineCreateInfo::builder()
+            .stages(&shader_stages)
+            .vertex_input_state(&vertex_input_state_info)
+            .input_assembly_state(&vertex_input_assembly_state_info)
+            .viewport_state(&viewport_state_info)
+            .rasterization_state(&rasterization_state_info)
+            .multisample_state(&_multisample_state_info)
+            .depth_stencil_state(&depth_state_info)
+            .color_blend_state(&color_blend_state_info)
+            .layout(pipeline_layout)
+            .render_pass(render_pass)
+            .subpass(0)
+            .build()];
+
+        let graphics_pipeline = unsafe {
+            device
+                .create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    &graphics_pipeline_infos,
+                    None,
+                )
+                .expect("Failed to create graphics pipeline")
+        };
+
         unsafe {
             device.destroy_shader_module(shader_module, None);
         };
 
-        pipeline_layout
+        (graphics_pipeline[0], pipeline_layout)
     }
 
     /// Creates a new shader module from spirv code
@@ -838,9 +871,11 @@ impl App {
         let render_pass_info = vk::RenderPassCreateInfo::builder()
             .attachments(&render_pass_attachments)
             .subpasses(&subpasses);
-        
+
         unsafe {
-            device.create_render_pass(&render_pass_info, None).expect("Failed to create render pass")
+            device
+                .create_render_pass(&render_pass_info, None)
+                .expect("Failed to create render pass")
         }
     }
 
@@ -879,6 +914,7 @@ impl Drop for App {
                 self.device.destroy_image_view(image_view, None);
             }
 
+            self.device.destroy_pipeline(self.graphics_pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device.destroy_render_pass(self.render_pass, None);
