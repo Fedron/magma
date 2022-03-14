@@ -20,16 +20,16 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
 
     match message_severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
-            log::info!("[Vulkan::debug] {} {:?}", type_, message)
+            log::info!("[Vulkan] {} {:?}", type_, message)
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-            log::warn!("[Vulkan::debug] {} {:?}", type_, message)
+            log::warn!("[Vulkan] {} {:?}", type_, message)
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
-            log::error!("[Vulkan::debug] {} {:?}", type_, message)
+            log::error!("[Vulkan] {} {:?}", type_, message)
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-            log::error!("[Vulkan::debug] {} {:?}", type_, message)
+            log::debug!("[Vulkan] {} {:?}", type_, message)
         }
         _ => {}
     };
@@ -87,7 +87,6 @@ pub fn setup_debug_utils(
             vk::DebugUtilsMessageSeverityFlagsEXT::INFO
                 | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
                 | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
-                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE,
         )
         .message_type(
             vk::DebugUtilsMessageTypeFlagsEXT::GENERAL

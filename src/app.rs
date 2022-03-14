@@ -55,6 +55,12 @@ pub struct App {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPhysicalDevice.html
     _physical_device: vk::PhysicalDevice,
+    /// Handle to Vulkan logical device
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDevice.html
+    device: ash::Device,
+    /// Handle to Vulkan queue used for graphics operations
+    _graphics_queue: vk::Queue,
 }
 
 impl App {
@@ -67,6 +73,8 @@ impl App {
         let (debug_utils_loader, debug_messenger) =
             utils::debug::setup_debug_utils(&entry, &instance);
         let physical_device = App::pick_physical_device(&instance);
+        let (logical_device, graphics_queue) =
+            App::create_logical_device(&instance, physical_device);
 
         App {
             _entry: entry,
@@ -74,6 +82,8 @@ impl App {
             debug_utils_loader,
             debug_messenger,
             _physical_device: physical_device,
+            device: logical_device,
+            _graphics_queue: graphics_queue,
         }
     }
 
@@ -246,6 +256,45 @@ impl App {
         queue_family_indices
     }
 
+    /// Creates a Vulkan logical device from a physical device
+    ///
+    /// Returns a handle to the created logical device, and it's graphics queue
+    fn create_logical_device(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> (ash::Device, vk::Queue) {
+        let indices = App::find_queue_family(instance, physical_device);
+
+        let queue_priorities = [1.0_f32];
+        let queue_infos = [vk::DeviceQueueCreateInfo::builder()
+            .queue_family_index(indices.graphics_family.unwrap())
+            .queue_priorities(&queue_priorities)
+            .build()];
+
+        let physical_device_features = vk::PhysicalDeviceFeatures::default();
+
+        let required_validation_layers: Vec<*const i8> = utils::constants::VALIDATION_LAYERS
+            .iter()
+            .map(|layer| layer.as_ptr() as *const i8)
+            .collect();
+
+        let device_info = vk::DeviceCreateInfo::builder()
+            .queue_create_infos(&queue_infos)
+            .enabled_features(&physical_device_features)
+            .enabled_layer_names(&required_validation_layers);
+
+        let device = unsafe {
+            instance
+                .create_device(physical_device, &device_info, None)
+                .expect("Failed to create logical device")
+        };
+
+        let graphics_queue =
+            unsafe { device.get_device_queue(indices.graphics_family.unwrap(), 0) };
+
+        (device, graphics_queue)
+    }
+
     /// Initialises a winit window, returning the initialised window
     pub fn init_window(event_loop: &EventLoop<()>) -> Window {
         WindowBuilder::new()
@@ -277,11 +326,13 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.device.destroy_device(None);
+            self.instance.destroy_instance(None);
+
             if utils::constants::ENABLE_VALIDATION_LAYERS {
                 self.debug_utils_loader
                     .destroy_debug_utils_messenger(self.debug_messenger, None);
             }
-            self.instance.destroy_instance(None);
         };
     }
 }
