@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
 
     let event_loop = EventLoop::new();
     let window = App::init_window(&event_loop);
-    let app = App::new();
+    let app = App::new(&window);
     app.main_loop(event_loop, window);
 
     Ok(())
