@@ -1,5 +1,5 @@
 use ash::vk;
-use std::ffi::{CStr, CString};
+use std::{ffi::CString, path::Path};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -102,8 +102,18 @@ struct SwapchainSupportInfo {
     present_modes: Vec<vk::PresentModeKHR>,
 }
 
+/// Contains Vulkan synchronization objects for syncing the CPU and GPU
+struct SynchronizationObjects {
+    image_available_semaphores: Vec<vk::Semaphore>,
+    render_finished_semaphores: Vec<vk::Semaphore>,
+    in_flight_fences: Vec<vk::Fence>,
+}
+
 /// Main application for Magma, and the entry point
 pub struct App {
+    /// Handle to winit window
+    window: winit::window::Window,
+
     /// Holds the loaded Vulkan library
     _entry: ash::Entry,
     /// Handle to the Vulkan instance
@@ -129,12 +139,12 @@ pub struct App {
     device: ash::Device,
 
     /// Handle to Vulkan queue used for graphics operations
-    _graphics_queue: vk::Queue,
+    graphics_queue: vk::Queue,
     /// Handle to Vulkan queue used for presenting images
-    _present_queue: vk::Queue,
+    present_queue: vk::Queue,
 
     /// Handle to the current swapchain for rendering
-    _swapchain: Swapchain,
+    swapchain: Swapchain,
     /// Handles to Vulkan image views for each image in the swapchain
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageView.html
@@ -159,14 +169,21 @@ pub struct App {
     /// List of all the command buffers we have recorded
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkCommandBuffer.html
-    _command_buffers: Vec<vk::CommandBuffer>,
+    command_buffers: Vec<vk::CommandBuffer>,
+
+    /// Wrapper for our Vulkan synchronization objection
+    sync_objects: SynchronizationObjects,
+    /// Index of frame being worked on (0 to number of framebuffers)
+    current_frame: usize,
 }
 
 impl App {
     /// Creates a new App
     ///
     /// Loads the Vulkan library and then creates a Vulkan instance
-    pub fn new(window: &winit::window::Window) -> App {
+    pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> App {
+        let window = App::init_window(event_loop);
+
         let entry = unsafe { ash::Entry::load().expect("Failed to load Vulkan library") };
         let instance = App::create_instance(&entry);
         let (debug_utils_loader, debug_messenger) =
@@ -214,7 +231,11 @@ impl App {
             swapchain.extent,
         );
 
+        let sync_objects = App::create_sync_objects(&device);
+
         App {
+            window,
+
             _entry: entry,
             instance,
             debug_utils_loader,
@@ -224,10 +245,10 @@ impl App {
             _physical_device: physical_device,
             device,
 
-            _graphics_queue: graphics_queue,
-            _present_queue: present_queue,
+            graphics_queue,
+            present_queue,
 
-            _swapchain: swapchain,
+            swapchain,
             swapchain_image_views,
             swapchain_framebuffers,
 
@@ -236,7 +257,10 @@ impl App {
             graphics_pipeline,
 
             command_pool,
-            _command_buffers: command_buffers,
+            command_buffers,
+
+            sync_objects,
+            current_frame: 0,
         }
     }
 
@@ -725,18 +749,23 @@ impl App {
         render_pass: vk::RenderPass,
         swapchain_extent: vk::Extent2D,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
-        let shader_code = App::read_shader_code("shaders/simple-shader");
-        let shader_module = App::create_shader_module(device, shader_code);
+        let vert_shader_code = App::read_shader_code(Path::new("shaders/spv/simple.vert.spv"));
+        let vert_shader_module = App::create_shader_module(device, vert_shader_code);
+
+        let frag_shader_code = App::read_shader_code(Path::new("shaders/spv/simple.frag.spv"));
+        let frag_shader_module = App::create_shader_module(device, frag_shader_code);
+
+        let main_function_name = CString::new("main").unwrap();
 
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::builder()
-                .module(shader_module)
-                .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main_vs\0") })
+                .module(vert_shader_module)
+                .name(&main_function_name)
                 .stage(vk::ShaderStageFlags::VERTEX)
                 .build(),
             vk::PipelineShaderStageCreateInfo::builder()
-                .module(shader_module)
-                .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main_fs\0") })
+                .module(frag_shader_module)
+                .name(&main_function_name)
                 .stage(vk::ShaderStageFlags::FRAGMENT)
                 .build(),
         ];
@@ -774,11 +803,16 @@ impl App {
             .line_width(1.0)
             .polygon_mode(vk::PolygonMode::FILL)
             .rasterizer_discard_enable(false)
-            .depth_bias_enable(false);
+            .depth_bias_clamp(0.0)
+            .depth_bias_constant_factor(0.0)
+            .depth_bias_enable(false)
+            .depth_bias_slope_factor(0.0);
 
-        let _multisample_state_info = vk::PipelineMultisampleStateCreateInfo::builder()
+        let multisample_state_info = vk::PipelineMultisampleStateCreateInfo::builder()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1)
             .sample_shading_enable(false)
+            .min_sample_shading(0.0)
+            .sample_mask(&[])
             .alpha_to_one_enable(false)
             .alpha_to_coverage_enable(false);
 
@@ -803,6 +837,13 @@ impl App {
 
         let color_blend_attachment_states = [vk::PipelineColorBlendAttachmentState::builder()
             .blend_enable(false)
+            .color_write_mask(vk::ColorComponentFlags::RGBA)
+            .src_color_blend_factor(vk::BlendFactor::ONE)
+            .dst_color_blend_factor(vk::BlendFactor::ZERO)
+            .color_blend_op(vk::BlendOp::ADD)
+            .src_alpha_blend_factor(vk::BlendFactor::ONE)
+            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+            .alpha_blend_op(vk::BlendOp::ADD)
             .build()];
 
         let color_blend_state_info = vk::PipelineColorBlendStateCreateInfo::builder()
@@ -826,7 +867,7 @@ impl App {
             .input_assembly_state(&vertex_input_assembly_state_info)
             .viewport_state(&viewport_state_info)
             .rasterization_state(&rasterization_state_info)
-            .multisample_state(&_multisample_state_info)
+            .multisample_state(&multisample_state_info)
             .depth_stencil_state(&depth_state_info)
             .color_blend_state(&color_blend_state_info)
             .layout(pipeline_layout)
@@ -845,15 +886,21 @@ impl App {
         };
 
         unsafe {
-            device.destroy_shader_module(shader_module, None);
+            device.destroy_shader_module(vert_shader_module, None);
         };
 
         (graphics_pipeline[0], pipeline_layout)
     }
 
     /// Creates a new shader module from spirv code
-    fn create_shader_module(device: &ash::Device, code: Vec<u32>) -> vk::ShaderModule {
-        let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
+    fn create_shader_module(device: &ash::Device, code: Vec<u8>) -> vk::ShaderModule {
+        let create_info = vk::ShaderModuleCreateInfo {
+            s_type: vk::StructureType::SHADER_MODULE_CREATE_INFO,
+            p_next: std::ptr::null(),
+            flags: vk::ShaderModuleCreateFlags::empty(),
+            code_size: code.len(),
+            p_code: code.as_ptr() as *const u32,
+        };
         unsafe {
             device
                 .create_shader_module(&create_info, None)
@@ -861,23 +908,18 @@ impl App {
         }
     }
 
-    /// Reads the compiled spirv from a shader crate made using rust-gpu
-    fn read_shader_code(shader_crate: &'static str) -> Vec<u32> {
-        let shader_path = spirv_builder::SpirvBuilder::new(shader_crate, "spirv-unknown-vulkan1.0")
-            .build()
-            .unwrap()
-            .module
-            .unwrap_single()
-            .to_path_buf();
+    /// Reads a compiled spirv file from the path specified
+    fn read_shader_code(shader_path: &Path) -> Vec<u8> {
+        use std::fs::File;
+        use std::io::Read;
 
-        ash::util::read_spv(
-            &mut std::fs::File::open(shader_path)
-                .expect(&format!("Failed to open shader file {}", shader_crate)),
-        )
-        .expect(&format!(
-            "Failed to read shader '{}' from spv",
-            shader_crate
-        ))
+        let spv_file = File::open(shader_path)
+            .expect(&format!("Failed to find spv file at {:?}", shader_path));
+
+        spv_file
+            .bytes()
+            .filter_map(|byte| byte.ok())
+            .collect::<Vec<u8>>()
     }
 
     /// Creates a new render pass for a graphics pipeline
@@ -902,10 +944,21 @@ impl App {
             .color_attachments(&color_attachment_ref)
             .build()];
 
+        let subpass_dependencies = [vk::SubpassDependency {
+            src_subpass: vk::SUBPASS_EXTERNAL,
+            dst_subpass: 0,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            src_access_mask: vk::AccessFlags::empty(),
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            dependency_flags: vk::DependencyFlags::empty(),
+        }];
+
         let render_pass_attachments = [color_attachment];
         let render_pass_info = vk::RenderPassCreateInfo::builder()
             .attachments(&render_pass_attachments)
-            .subpasses(&subpasses);
+            .subpasses(&subpasses)
+            .dependencies(&subpass_dependencies);
 
         unsafe {
             device
@@ -991,7 +1044,7 @@ impl App {
 
             let clear_values = [vk::ClearValue {
                 color: vk::ClearColorValue {
-                    float32: [0.2, 0.2, 0.2, 1.0],
+                    float32: [0.1, 0.1, 0.1, 1.0],
                 },
             }];
 
@@ -1028,6 +1081,40 @@ impl App {
         command_buffers
     }
 
+    /// Creates Vulkan semaphores and fences to allow for synchronization between the CPU and GPU
+    fn create_sync_objects(device: &ash::Device) -> SynchronizationObjects {
+        let mut sync_objects = SynchronizationObjects {
+            image_available_semaphores: vec![],
+            render_finished_semaphores: vec![],
+            in_flight_fences: vec![],
+        };
+
+        let semaphore_info = vk::SemaphoreCreateInfo::default();
+        let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+
+        for _ in 0..utils::constants::MAX_FRAMES_IN_FLIGHT {
+            unsafe {
+                sync_objects.image_available_semaphores.push(
+                    device
+                        .create_semaphore(&semaphore_info, None)
+                        .expect("Failed to create semaphore"),
+                );
+                sync_objects.render_finished_semaphores.push(
+                    device
+                        .create_semaphore(&semaphore_info, None)
+                        .expect("Failed to create semaphore"),
+                );
+                sync_objects.in_flight_fences.push(
+                    device
+                        .create_fence(&fence_info, None)
+                        .expect("Failed to create semaphore"),
+                );
+            };
+        }
+
+        sync_objects
+    }
+
     /// Initialises a winit window, returning the initialised window
     pub fn init_window(event_loop: &EventLoop<()>) -> Window {
         WindowBuilder::new()
@@ -1040,17 +1127,88 @@ impl App {
             .expect("")
     }
 
-    pub fn draw_frame(&mut self) {}
+    /// Draws the newest framebuffer to the window
+    pub fn draw_frame(&mut self) {
+        // Wait for previous frame to finish drawing (blocking wait)
+        let wait_fences = [self.sync_objects.in_flight_fences[self.current_frame]];
+
+        let (image_index, _) = unsafe {
+            self.device
+                .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                .expect("Failed to wait for fences");
+
+            self.swapchain
+                .loader
+                .acquire_next_image(
+                    self.swapchain.swapchain,
+                    std::u64::MAX,
+                    self.sync_objects.image_available_semaphores[self.current_frame],
+                    vk::Fence::null(),
+                )
+                .expect("Failed to acquire next image")
+        };
+
+        // Get GPU to start working on the next frame
+        let wait_semaphores = [self.sync_objects.image_available_semaphores[self.current_frame]];
+        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let signal_semaphores = [self.sync_objects.render_finished_semaphores[self.current_frame]];
+
+        let command_buffers = [self.command_buffers[image_index as usize]];
+        let submit_infos = [vk::SubmitInfo::builder()
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&wait_stages)
+            .command_buffers(&command_buffers)
+            .signal_semaphores(&signal_semaphores)
+            .build()];
+
+        unsafe {
+            self.device
+                .reset_fences(&wait_fences)
+                .expect("Failed to reset fences");
+
+            self.device
+                .queue_submit(
+                    self.graphics_queue,
+                    &submit_infos,
+                    self.sync_objects.in_flight_fences[self.current_frame],
+                )
+                .expect("Failed to execute queue submit")
+        };
+
+        // Present the frame that just finished drawing
+        let swapchains = [self.swapchain.swapchain];
+        let image_indices = [image_index];
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&signal_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+
+        unsafe {
+            self.swapchain
+                .loader
+                .queue_present(self.present_queue, &present_info)
+                .expect("Failed to execute queue present");
+        };
+
+        self.current_frame = (self.current_frame + 1) % utils::constants::MAX_FRAMES_IN_FLIGHT;
+    }
 
     /// Runs the winit event loop, which wraps the App main loop
-    pub fn main_loop(mut self, event_loop: EventLoop<()>, window: Window) {
+    pub fn main_loop(mut self, event_loop: EventLoop<()>) {
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                 _ => {}
             },
-            Event::MainEventsCleared => window.request_redraw(),
+            Event::MainEventsCleared => self.window.request_redraw(),
             Event::RedrawRequested(_) => self.draw_frame(),
+            Event::LoopDestroyed => {
+                unsafe {
+                    self.device
+                        .device_wait_idle()
+                        .expect("Failed to wait until device idle");
+                };
+            }
             _ => {}
         });
     }
@@ -1059,6 +1217,15 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for i in 0..utils::constants::MAX_FRAMES_IN_FLIGHT {
+                self.device
+                    .destroy_semaphore(self.sync_objects.image_available_semaphores[i], None);
+                self.device
+                    .destroy_semaphore(self.sync_objects.render_finished_semaphores[i], None);
+                self.device
+                    .destroy_fence(self.sync_objects.in_flight_fences[i], None);
+            }
+
             self.device.destroy_command_pool(self.command_pool, None);
 
             for &image_view in self.swapchain_image_views.iter() {
