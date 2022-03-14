@@ -139,6 +139,7 @@ pub struct App {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageView.html
     swapchain_image_views: Vec<vk::ImageView>,
+    swapchain_framebuffers: Vec<vk::Framebuffer>,
 
     /// Handle to Vulkan render pass being used by the graphics pipeline
     render_pass: vk::RenderPass,
@@ -187,18 +188,30 @@ impl App {
         let (graphics_pipeline, pipeline_layout) =
             App::create_graphics_pipeline(&device, render_pass, swapchain.extent);
 
+        let swapchain_framebuffers = App::create_framebuffers(
+            &device,
+            render_pass,
+            &swapchain_image_views,
+            &swapchain.extent,
+        );
+
         App {
             _entry: entry,
             instance,
             debug_utils_loader,
             debug_messenger,
             _surface: surface,
+
             _physical_device: physical_device,
             device,
+
             _graphics_queue: graphics_queue,
             _present_queue: present_queue,
+
             _swapchain: swapchain,
             swapchain_image_views,
+            swapchain_framebuffers,
+
             render_pass,
             pipeline_layout,
             graphics_pipeline,
@@ -879,6 +892,34 @@ impl App {
         }
     }
 
+    /// Creates framebuffers for every swapchain image view
+    fn create_framebuffers(
+        device: &ash::Device,
+        render_pass: vk::RenderPass,
+        image_views: &Vec<vk::ImageView>,
+        swapchain_extent: &vk::Extent2D,
+    ) -> Vec<vk::Framebuffer> {
+        let mut framebuffers: Vec<vk::Framebuffer> = Vec::new();
+        for &image_view in image_views.iter() {
+            let attachments = [image_view];
+
+            let framebuffer_info = vk::FramebufferCreateInfo::builder()
+                .render_pass(render_pass)
+                .attachments(&attachments)
+                .width(swapchain_extent.width)
+                .height(swapchain_extent.height)
+                .layers(1);
+
+            framebuffers.push(unsafe {
+                device
+                    .create_framebuffer(&framebuffer_info, None)
+                    .expect("Failed to create framebuffer")
+            });
+        }
+
+        framebuffers
+    }
+
     /// Initialises a winit window, returning the initialised window
     pub fn init_window(event_loop: &EventLoop<()>) -> Window {
         WindowBuilder::new()
@@ -912,6 +953,10 @@ impl Drop for App {
         unsafe {
             for &image_view in self.swapchain_image_views.iter() {
                 self.device.destroy_image_view(image_view, None);
+            }
+
+            for &framebuffer in self.swapchain_framebuffers.iter() {
+                self.device.destroy_framebuffer(framebuffer, None);
             }
 
             self.device.destroy_pipeline(self.graphics_pipeline, None);
