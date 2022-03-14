@@ -75,7 +75,7 @@ struct Swapchain {
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkFormat.html
     format: vk::Format,
     /// Size, in pixels, of the swapchain
-    _extent: vk::Extent2D,
+    extent: vk::Extent2D,
 }
 
 impl Drop for Swapchain {
@@ -139,6 +139,11 @@ pub struct App {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageView.html
     swapchain_image_views: Vec<vk::ImageView>,
+
+    /// Handle to Vulkan pipeline layout used by the graphics pipeline
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPipelineLayout.html
+    pipeline_layout: vk::PipelineLayout,
 }
 
 impl App {
@@ -172,7 +177,7 @@ impl App {
         let swapchain_image_views =
             App::create_image_views(&device, swapchain.format, &swapchain.images);
 
-        let _graphics_pipeline = App::create_graphics_pipeline(&device);
+        let pipeline_layout = App::create_graphics_pipeline(&device, swapchain.extent);
 
         App {
             _entry: entry,
@@ -186,6 +191,7 @@ impl App {
             _present_queue: present_queue,
             _swapchain: swapchain,
             swapchain_image_views,
+            pipeline_layout,
         }
     }
 
@@ -584,7 +590,7 @@ impl App {
             swapchain,
             images,
             format: surface_format.format,
-            _extent: extent,
+            extent,
         }
     }
 
@@ -668,7 +674,11 @@ impl App {
         image_views
     }
 
-    fn create_graphics_pipeline(device: &ash::Device) {
+    /// Creates a new Vulkan graphics pipeline
+    fn create_graphics_pipeline(
+        device: &ash::Device,
+        swapchain_extent: vk::Extent2D,
+    ) -> vk::PipelineLayout {
         let shader_code = App::read_shader_code("shaders/simple-shader");
         let shader_module = App::create_shader_module(device, shader_code);
 
@@ -683,11 +693,93 @@ impl App {
                 .stage(vk::ShaderStageFlags::FRAGMENT),
         ];
 
+        let _vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
+            .vertex_attribute_descriptions(&[])
+            .vertex_binding_descriptions(&[]);
+
+        let _vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
+            .primitive_restart_enable(false)
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+
+        let viewports = [vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: swapchain_extent.width as f32,
+            height: swapchain_extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }];
+
+        let scissors = [vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: swapchain_extent,
+        }];
+
+        let _viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
+            .scissors(&scissors)
+            .viewports(&viewports);
+
+        let _rasterization_state_info = vk::PipelineRasterizationStateCreateInfo::builder()
+            .depth_clamp_enable(false)
+            .cull_mode(vk::CullModeFlags::BACK)
+            .front_face(vk::FrontFace::CLOCKWISE)
+            .line_width(1.0)
+            .polygon_mode(vk::PolygonMode::FILL)
+            .rasterizer_discard_enable(false)
+            .depth_bias_enable(false);
+
+        let _multisample_state_info = vk::PipelineMultisampleStateCreateInfo::builder()
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1)
+            .sample_shading_enable(false)
+            .alpha_to_one_enable(false)
+            .alpha_to_coverage_enable(false);
+
+        let stencil_state = vk::StencilOpState::builder()
+            .fail_op(vk::StencilOp::KEEP)
+            .pass_op(vk::StencilOp::KEEP)
+            .depth_fail_op(vk::StencilOp::KEEP)
+            .compare_op(vk::CompareOp::ALWAYS)
+            .compare_mask(0)
+            .write_mask(0)
+            .reference(0)
+            .build();
+
+        let _depth_state_info = vk::PipelineDepthStencilStateCreateInfo::builder()
+            .depth_test_enable(false)
+            .depth_write_enable(false)
+            .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
+            .depth_bounds_test_enable(false)
+            .stencil_test_enable(false)
+            .front(stencil_state)
+            .back(stencil_state);
+
+        let color_blend_attachment_states = [vk::PipelineColorBlendAttachmentState::builder()
+            .blend_enable(false)
+            .build()];
+
+        let _color_blend_state_info = vk::PipelineColorBlendStateCreateInfo::builder()
+            .logic_op_enable(false)
+            .attachments(&color_blend_attachment_states)
+            .blend_constants([0.0, 0.0, 0.0, 0.0]);
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
+            .set_layouts(&[])
+            .push_constant_ranges(&[]);
+
+        let pipeline_layout = unsafe {
+            device
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .expect("Failed to create pipeline layout")
+        };
+
         unsafe {
             device.destroy_shader_module(shader_module, None);
-        }
+        };
+
+        pipeline_layout
     }
 
+    /// Creates a new shader module from spirv code
     fn create_shader_module(device: &ash::Device, code: Vec<u32>) -> vk::ShaderModule {
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
         unsafe {
@@ -697,6 +789,7 @@ impl App {
         }
     }
 
+    /// Reads the compiled spirv from a shader crate made using rust-gpu
     fn read_shader_code(shader_crate: &'static str) -> Vec<u32> {
         let shader_path = spirv_builder::SpirvBuilder::new(shader_crate, "spirv-unknown-vulkan1.0")
             .build()
@@ -750,6 +843,8 @@ impl Drop for App {
                 self.device.destroy_image_view(image_view, None);
             }
 
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
 
