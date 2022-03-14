@@ -2,7 +2,7 @@ use ash::{
     extensions::ext::DebugUtils,
     vk::{self, DebugUtilsMessengerEXT},
 };
-use std::{collections::HashSet, ffi::CStr, os::raw::c_void};
+use std::{ffi::CStr, os::raw::c_void};
 
 unsafe extern "system" fn vulkan_debug_utils_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -47,28 +47,24 @@ pub fn check_validation_layer_support(
     let supported_layers = entry
         .enumerate_instance_layer_properties()
         .expect("Failed to get instance layer properties");
-    let required_hash_set = HashSet::<String>::from_iter(
-        required_validation_layers
+
+    let is_missing_layers = super::contains_required(
+        &supported_layers
+            .iter()
+            .map(|layer| super::char_array_to_string(&layer.layer_name))
+            .collect::<Vec<String>>(),
+        &required_validation_layers
             .iter()
             .map(|&layer| layer.to_string())
             .collect::<Vec<String>>(),
     );
-    let supported_hash_set = &HashSet::<String>::from_iter(
-        supported_layers
-            .iter()
-            .map(|layer| super::char_array_to_string(&layer.layer_name))
-            .collect::<Vec<String>>(),
-    );
-    let missing_layers = required_hash_set
-        .difference(supported_hash_set)
-        .collect::<Vec<&String>>();
 
-    if missing_layers.len() > 0 {
+    if is_missing_layers.0 {
         log::error!(
-            "Your device is missing required layers: {:?}",
-            missing_layers
+            "Your device is missing required extensions: {:?}",
+            is_missing_layers.1
         );
-        return false;
+        panic!("Missing extensions, see above")
     }
 
     true
@@ -86,7 +82,7 @@ pub fn setup_debug_utils(
         .message_severity(
             vk::DebugUtilsMessageSeverityFlagsEXT::INFO
                 | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
         )
         .message_type(
             vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
