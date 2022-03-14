@@ -78,14 +78,6 @@ struct Swapchain {
     extent: vk::Extent2D,
 }
 
-impl Drop for Swapchain {
-    fn drop(&mut self) {
-        unsafe {
-            self.loader.destroy_swapchain(self.swapchain, None);
-        };
-    }
-}
-
 /// Contains information and the features and properties of a swapchain
 struct SwapchainSupportInfo {
     /// Various properties of the swapchain
@@ -127,7 +119,7 @@ pub struct App {
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDebugUtilsMessengerEXT.html
     debug_messenger: vk::DebugUtilsMessengerEXT,
     /// Handle to the Vulkan surface and surface loader
-    _surface: Surface,
+    surface: Surface,
 
     /// Handle to Vulkan physical device this app is using
     ///
@@ -240,7 +232,7 @@ impl App {
             instance,
             debug_utils_loader,
             debug_messenger,
-            _surface: surface,
+            surface,
 
             _physical_device: physical_device,
             device,
@@ -482,17 +474,21 @@ impl App {
     ) -> (ash::Device, QueueFamilyIndices) {
         let indices = App::find_queue_family(instance, physical_device, surface);
 
+        use std::collections::HashSet;
+        let mut unique_queue_families = HashSet::new();
+        unique_queue_families.insert(indices.graphics_family.unwrap());
+        unique_queue_families.insert(indices.present_family.unwrap());
+
         let queue_priorities = [1.0_f32];
-        let queue_infos = [
-            vk::DeviceQueueCreateInfo::builder()
-                .queue_family_index(indices.graphics_family.unwrap())
-                .queue_priorities(&queue_priorities)
-                .build(),
-            vk::DeviceQueueCreateInfo::builder()
-                .queue_family_index(indices.present_family.unwrap())
-                .queue_priorities(&queue_priorities)
-                .build(),
-        ];
+        let mut queue_infos: Vec<vk::DeviceQueueCreateInfo> = Vec::new();
+        for &queue_family in unique_queue_families.iter() {
+            queue_infos.push(
+                vk::DeviceQueueCreateInfo::builder()
+                    .queue_family_index(queue_family)
+                    .queue_priorities(&queue_priorities)
+                    .build(),
+            );
+        }
 
         let physical_device_features = vk::PhysicalDeviceFeatures::default();
 
@@ -887,6 +883,7 @@ impl App {
 
         unsafe {
             device.destroy_shader_module(vert_shader_module, None);
+            device.destroy_shader_module(frag_shader_module, None);
         };
 
         (graphics_pipeline[0], pipeline_layout)
@@ -1228,10 +1225,6 @@ impl Drop for App {
 
             self.device.destroy_command_pool(self.command_pool, None);
 
-            for &image_view in self.swapchain_image_views.iter() {
-                self.device.destroy_image_view(image_view, None);
-            }
-
             for &framebuffer in self.swapchain_framebuffers.iter() {
                 self.device.destroy_framebuffer(framebuffer, None);
             }
@@ -1240,13 +1233,22 @@ impl Drop for App {
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device.destroy_render_pass(self.render_pass, None);
-            self.device.destroy_device(None);
-            self.instance.destroy_instance(None);
 
-            if utils::constants::ENABLE_VALIDATION_LAYERS {
-                self.debug_utils_loader
-                    .destroy_debug_utils_messenger(self.debug_messenger, None);
+            for &image_view in self.swapchain_image_views.iter() {
+                self.device.destroy_image_view(image_view, None);
             }
+
+            self.swapchain
+                .loader
+                .destroy_swapchain(self.swapchain.swapchain, None);
+            self.device.destroy_device(None);
+            self.surface
+                .loader
+                .destroy_surface(self.surface.surface, None);
+
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
+            self.instance.destroy_instance(None);
         };
     }
 }
