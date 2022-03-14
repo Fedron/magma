@@ -1,5 +1,5 @@
 use ash::vk;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -169,9 +169,10 @@ impl App {
             &surface,
             &family_indices,
         );
-
         let swapchain_image_views =
             App::create_image_views(&device, swapchain.format, &swapchain.images);
+
+        let _graphics_pipeline = App::create_graphics_pipeline(&device);
 
         App {
             _entry: entry,
@@ -665,6 +666,53 @@ impl App {
         }
 
         image_views
+    }
+
+    fn create_graphics_pipeline(device: &ash::Device) {
+        let shader_code = App::read_shader_code("shaders/simple-shader");
+        let shader_module = App::create_shader_module(device, shader_code);
+
+        let _shader_stages = [
+            vk::PipelineShaderStageCreateInfo::builder()
+                .module(shader_module)
+                .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main_vs\0") })
+                .stage(vk::ShaderStageFlags::VERTEX),
+            vk::PipelineShaderStageCreateInfo::builder()
+                .module(shader_module)
+                .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main_fs\0") })
+                .stage(vk::ShaderStageFlags::FRAGMENT),
+        ];
+
+        unsafe {
+            device.destroy_shader_module(shader_module, None);
+        }
+    }
+
+    fn create_shader_module(device: &ash::Device, code: Vec<u32>) -> vk::ShaderModule {
+        let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
+        unsafe {
+            device
+                .create_shader_module(&create_info, None)
+                .expect("Failed to create shader module")
+        }
+    }
+
+    fn read_shader_code(shader_crate: &'static str) -> Vec<u32> {
+        let shader_path = spirv_builder::SpirvBuilder::new(shader_crate, "spirv-unknown-vulkan1.0")
+            .build()
+            .unwrap()
+            .module
+            .unwrap_single()
+            .to_path_buf();
+
+        ash::util::read_spv(
+            &mut std::fs::File::open(shader_path)
+                .expect(&format!("Failed to open shader file {}", shader_crate)),
+        )
+        .expect(&format!(
+            "Failed to read shader '{}' from spv",
+            shader_crate
+        ))
     }
 
     /// Initialises a winit window, returning the initialised window
