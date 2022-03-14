@@ -8,9 +8,8 @@ fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let event_loop = EventLoop::new();
-    let window = App::init_window(&event_loop);
-    let app = App::new(&window);
-    app.main_loop(event_loop, window);
+    let app = App::new(&event_loop);
+    app.main_loop(event_loop);
 
     Ok(())
 }
