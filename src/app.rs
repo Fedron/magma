@@ -69,11 +69,11 @@ struct Swapchain {
     /// Images that can be be drawn to and presented
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImage.html
-    _images: Vec<vk::Image>,
+    images: Vec<vk::Image>,
     /// Color format for all images
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkFormat.html
-    _format: vk::Format,
+    format: vk::Format,
     /// Size, in pixels, of the swapchain
     _extent: vk::Extent2D,
 }
@@ -135,6 +135,10 @@ pub struct App {
 
     /// Handle to the current swapchain for rendering
     _swapchain: Swapchain,
+    /// Handles to Vulkan image views for each image in the swapchain
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageView.html
+    swapchain_image_views: Vec<vk::ImageView>,
 }
 
 impl App {
@@ -166,6 +170,9 @@ impl App {
             &family_indices,
         );
 
+        let swapchain_image_views =
+            App::create_image_views(&device, swapchain.format, &swapchain.images);
+
         App {
             _entry: entry,
             instance,
@@ -177,6 +184,7 @@ impl App {
             _graphics_queue: graphics_queue,
             _present_queue: present_queue,
             _swapchain: swapchain,
+            swapchain_image_views,
         }
     }
 
@@ -573,8 +581,8 @@ impl App {
         Swapchain {
             loader,
             swapchain,
-            _images: images,
-            _format: surface_format.format,
+            images,
+            format: surface_format.format,
             _extent: extent,
         }
     }
@@ -623,6 +631,42 @@ impl App {
         }
     }
 
+    /// Creates an image view for every image
+    fn create_image_views(
+        device: &ash::Device,
+        surface_format: vk::Format,
+        images: &Vec<vk::Image>,
+    ) -> Vec<vk::ImageView> {
+        let mut image_views: Vec<vk::ImageView> = Vec::new();
+        for &image in images.iter() {
+            let create_info = vk::ImageViewCreateInfo::builder()
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(surface_format)
+                .components(vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::IDENTITY,
+                    g: vk::ComponentSwizzle::IDENTITY,
+                    b: vk::ComponentSwizzle::IDENTITY,
+                    a: vk::ComponentSwizzle::IDENTITY,
+                })
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .image(image);
+
+            image_views.push(unsafe {
+                device
+                    .create_image_view(&create_info, None)
+                    .expect("Failed to create image view")
+            });
+        }
+
+        image_views
+    }
+
     /// Initialises a winit window, returning the initialised window
     pub fn init_window(event_loop: &EventLoop<()>) -> Window {
         WindowBuilder::new()
@@ -654,6 +698,10 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for &image_view in self.swapchain_image_views.iter() {
+                self.device.destroy_image_view(image_view, None);
+            }
+
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
 
