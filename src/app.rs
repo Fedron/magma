@@ -14,27 +14,47 @@ const WINDOW_TITLE: &'static str = "Magma";
 struct QueueFamilyIndices {
     /// Index of the graphics queue family
     graphics_family: Option<u32>,
-}
-
-/// Contains information about a Vulkan physical device, as well as a handle to the device
-struct PhysicalDeviceInfo<'a> {
-    name: String,
-    _device_id: u32,
-    device_type: &'a str,
-    is_suitable: bool,
-    handle: vk::PhysicalDevice,
-}
-
-impl std::fmt::Display for PhysicalDeviceInfo<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({})", self.name, self.device_type)
-    }
+    /// Index of the present queue family
+    present_family: Option<u32>,
 }
 
 impl QueueFamilyIndices {
     /// Returns whether or not all the queue family indices are present
     pub fn is_complete(&self) -> bool {
-        self.graphics_family.is_some()
+        self.graphics_family.is_some() && self.present_family.is_some()
+    }
+}
+
+/// Contains information about a Vulkan physical device, as well as a handle to the device
+struct PhysicalDeviceInfo {
+    name: String,
+    _device_id: u32,
+    device_type: String,
+    is_suitable: bool,
+    handle: vk::PhysicalDevice,
+}
+
+impl std::fmt::Display for PhysicalDeviceInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.name, self.device_type)
+    }
+}
+
+/// Wrapper around a surface loader and a handle to a Vulkan surface
+struct Surface {
+    /// Manages the Vulkan surface
+    pub loader: ash::extensions::khr::Surface,
+    /// Handle to Vulkan surface used for this app's window
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkSurfaceKHR.html
+    pub surface: vk::SurfaceKHR,
+}
+
+impl Drop for Surface {
+    fn drop(&mut self) {
+        unsafe {
+            self.loader.destroy_surface(self.surface, None);
+        };
     }
 }
 
@@ -51,6 +71,8 @@ pub struct App {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDebugUtilsMessengerEXT.html
     debug_messenger: vk::DebugUtilsMessengerEXT,
+    /// Handle to the Vulkan surface and surface loader
+    _surface: Surface,
     /// Handle to Vulkan physical device this app is using
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPhysicalDevice.html
@@ -61,29 +83,41 @@ pub struct App {
     device: ash::Device,
     /// Handle to Vulkan queue used for graphics operations
     _graphics_queue: vk::Queue,
+    /// Handle to Vulkan queue used for presenting images
+    _present_queue: vk::Queue,
 }
 
 impl App {
     /// Creates a new App
     ///
     /// Loads the Vulkan library and then creates a Vulkan instance
-    pub fn new() -> App {
+    pub fn new(window: &winit::window::Window) -> App {
         let entry = unsafe { ash::Entry::load().expect("Failed to load Vulkan library") };
         let instance = App::create_instance(&entry);
         let (debug_utils_loader, debug_messenger) =
             utils::debug::setup_debug_utils(&entry, &instance);
-        let physical_device = App::pick_physical_device(&instance);
-        let (logical_device, graphics_queue) =
-            App::create_logical_device(&instance, physical_device);
+
+        let surface = App::create_surface(&entry, &instance, &window);
+
+        let physical_device = App::pick_physical_device(&instance, &surface);
+        let (device, family_indices) =
+            App::create_logical_device(&instance, physical_device, &surface);
+
+        let graphics_queue =
+            unsafe { device.get_device_queue(family_indices.graphics_family.unwrap(), 0) };
+        let present_queue =
+            unsafe { device.get_device_queue(family_indices.present_family.unwrap(), 0) };
 
         App {
             _entry: entry,
             instance,
             debug_utils_loader,
             debug_messenger,
+            _surface: surface,
             _physical_device: physical_device,
-            device: logical_device,
+            device,
             _graphics_queue: graphics_queue,
+            _present_queue: present_queue,
         }
     }
 
@@ -166,8 +200,24 @@ impl App {
         true
     }
 
+    /// Creates a platform-specific surface for Vulkan
+    ///
+    /// Returns the surface loader and a handle to the create surface
+    fn create_surface(entry: &ash::Entry, instance: &ash::Instance, window: &Window) -> Surface {
+        let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
+        let surface = unsafe {
+            utils::platforms::create_surface(entry, instance, window)
+                .expect("Failed to create surface")
+        };
+
+        Surface {
+            loader: surface_loader,
+            surface,
+        }
+    }
+
     /// Finds a Vulkan physical device that matches the needs of the application, and returns it
-    fn pick_physical_device(instance: &ash::Instance) -> vk::PhysicalDevice {
+    fn pick_physical_device(instance: &ash::Instance, surface: &Surface) -> vk::PhysicalDevice {
         let physical_devices = unsafe {
             instance
                 .enumerate_physical_devices()
@@ -176,7 +226,8 @@ impl App {
 
         let mut chosen_device: Option<PhysicalDeviceInfo> = None;
         for &physical_device in physical_devices.iter() {
-            let physical_device_info = App::is_physical_device_suitable(instance, physical_device);
+            let physical_device_info =
+                App::is_physical_device_suitable(instance, physical_device, surface);
             if physical_device_info.is_suitable {
                 if chosen_device.is_none() {
                     chosen_device = Some(physical_device_info)
@@ -202,6 +253,7 @@ impl App {
     fn is_physical_device_suitable(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
+        surface: &Surface,
     ) -> PhysicalDeviceInfo {
         let device_properties = unsafe { instance.get_physical_device_properties(physical_device) };
         let _device_features = unsafe { instance.get_physical_device_features(physical_device) };
@@ -216,12 +268,12 @@ impl App {
             _ => "Unknown",
         };
 
-        let indices = App::find_queue_family(instance, physical_device);
+        let indices = App::find_queue_family(instance, physical_device, surface);
 
         PhysicalDeviceInfo {
             name: utils::char_array_to_string(&device_properties.device_name),
             _device_id: device_properties.device_id,
-            device_type,
+            device_type: String::from(device_type),
             is_suitable: indices.is_complete(),
             handle: physical_device,
         }
@@ -231,11 +283,13 @@ impl App {
     fn find_queue_family(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
+        surface: &Surface,
     ) -> QueueFamilyIndices {
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
         let mut queue_family_indices = QueueFamilyIndices {
             graphics_family: None,
+            present_family: None,
         };
 
         let mut index = 0;
@@ -244,6 +298,20 @@ impl App {
                 && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
             {
                 queue_family_indices.graphics_family = Some(index);
+            }
+
+            let has_present_support = unsafe {
+                surface
+                    .loader
+                    .get_physical_device_surface_support(
+                        physical_device,
+                        index as u32,
+                        surface.surface,
+                    )
+                    .expect("Failed to get surface support for physical device")
+            };
+            if queue_family.queue_count > 0 && has_present_support {
+                queue_family_indices.present_family = Some(index);
             }
 
             if queue_family_indices.is_complete() {
@@ -262,14 +330,21 @@ impl App {
     fn create_logical_device(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-    ) -> (ash::Device, vk::Queue) {
-        let indices = App::find_queue_family(instance, physical_device);
+        surface: &Surface,
+    ) -> (ash::Device, QueueFamilyIndices) {
+        let indices = App::find_queue_family(instance, physical_device, surface);
 
         let queue_priorities = [1.0_f32];
-        let queue_infos = [vk::DeviceQueueCreateInfo::builder()
-            .queue_family_index(indices.graphics_family.unwrap())
-            .queue_priorities(&queue_priorities)
-            .build()];
+        let queue_infos = [
+            vk::DeviceQueueCreateInfo::builder()
+                .queue_family_index(indices.graphics_family.unwrap())
+                .queue_priorities(&queue_priorities)
+                .build(),
+            vk::DeviceQueueCreateInfo::builder()
+                .queue_family_index(indices.present_family.unwrap())
+                .queue_priorities(&queue_priorities)
+                .build(),
+        ];
 
         let physical_device_features = vk::PhysicalDeviceFeatures::default();
 
@@ -289,10 +364,7 @@ impl App {
                 .expect("Failed to create logical device")
         };
 
-        let graphics_queue =
-            unsafe { device.get_device_queue(indices.graphics_family.unwrap(), 0) };
-
-        (device, graphics_queue)
+        (device, indices)
     }
 
     /// Initialises a winit window, returning the initialised window
