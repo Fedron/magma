@@ -89,6 +89,7 @@ pub struct Device {
 }
 
 impl Device {
+    /// Creates a new Vulkan instance and logical device
     pub fn new(window: &winit::window::Window) -> Device {
         let entry = unsafe { ash::Entry::load().expect("Failed to load Vulkan library") };
         let instance = Device::create_instance(&entry);
