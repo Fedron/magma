@@ -86,6 +86,11 @@ pub struct Device {
     pub graphics_queue: vk::Queue,
     /// Handle to Vulkan queue used for presenting images
     pub present_queue: vk::Queue,
+
+    /// Handle to Vulkan command pool that contains all our command buffers
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkCommandPool.html
+    pub command_pool: vk::CommandPool,
 }
 
 impl Device {
@@ -107,6 +112,8 @@ impl Device {
         let present_queue =
             unsafe { device.get_device_queue(family_indices.present_family.unwrap(), 0) };
 
+        let command_pool = Device::create_command_pool(&device, &family_indices);
+
         Device {
             _entry: entry,
             instance,
@@ -122,6 +129,8 @@ impl Device {
 
             graphics_queue,
             present_queue,
+
+            command_pool,
         }
     }
 
@@ -457,6 +466,21 @@ impl Device {
         };
 
         (device, indices)
+    }
+
+    /// Helper constructor that creates a Vulkan command pool
+    fn create_command_pool(
+        device: &ash::Device,
+        queue_family: &QueueFamilyIndices,
+    ) -> vk::CommandPool {
+        let create_info = vk::CommandPoolCreateInfo::builder()
+            .queue_family_index(queue_family.graphics_family.unwrap());
+
+        unsafe {
+            device
+                .create_command_pool(&create_info, None)
+                .expect("Failed to create command pool")
+        }
     }
 }
 
