@@ -85,7 +85,7 @@ pub fn setup_debug_utils(
                 | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
         )
         .message_type(
-                vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+            vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
                 | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
         )
         .pfn_user_callback(Some(vulkan_debug_utils_callback));
