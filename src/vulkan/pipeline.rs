@@ -31,7 +31,6 @@ impl Pipeline {
     pub fn new(
         device: Rc<Device>,
         shader: &Path,
-        swapchain_extent: vk::Extent2D,
         render_pass: vk::RenderPass,
     ) -> Pipeline {
         // Compile shaders
@@ -60,23 +59,11 @@ impl Pipeline {
             .primitive_restart_enable(false)
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
 
-        let viewports = [vk::Viewport {
-            x: 0.0,
-            y: 0.0,
-            width: swapchain_extent.width as f32,
-            height: swapchain_extent.height as f32,
-            min_depth: 0.0,
-            max_depth: 1.0,
-        }];
-
-        let scissors = [vk::Rect2D {
-            offset: vk::Offset2D { x: 0, y: 0 },
-            extent: swapchain_extent,
-        }];
-
         let viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
-            .scissors(&scissors)
-            .viewports(&viewports);
+            .scissors(&[])
+            .scissor_count(1)
+            .viewports(&[])
+            .viewport_count(1);
 
         let rasterization_state_info = vk::PipelineRasterizationStateCreateInfo::builder()
             .depth_clamp_enable(false)
@@ -133,6 +120,10 @@ impl Pipeline {
             .attachments(&color_blend_attachment_states)
             .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
+        let dynamic_state_enables = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::builder()
+            .dynamic_states(&dynamic_state_enables);
+
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(&[])
             .push_constant_ranges(&[]);
@@ -156,6 +147,7 @@ impl Pipeline {
             .layout(pipeline_layout)
             .render_pass(render_pass)
             .subpass(0)
+            .dynamic_state(&dynamic_state_info)
             .build()];
 
         let graphics_pipeline = unsafe {

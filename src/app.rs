@@ -18,10 +18,10 @@ pub struct App {
     window: winit::window::Window,
     device: Rc<Device>,
     swapchain: Swapchain,
-    _pipeline: Pipeline,
+    pipeline: Pipeline,
     command_buffers: Vec<vk::CommandBuffer>,
 
-    _test_model: Model,
+    test_model: Model,
 }
 
 impl App {
@@ -36,7 +36,6 @@ impl App {
         let pipeline = Pipeline::new(
             device.clone(),
             Path::new("shaders/simple-shader"),
-            swapchain.extent,
             swapchain.render_pass,
         );
 
@@ -61,37 +60,57 @@ impl App {
         let command_buffers = App::create_command_buffers(
             &device.device,
             device.command_pool,
-            pipeline.graphics_pipeline,
-            &swapchain.framebuffers,
-            swapchain.render_pass,
-            swapchain.extent,
-            &model,
+            swapchain.framebuffers.len() as u32,
         );
 
         App {
             window,
             device,
             swapchain,
-            _pipeline: pipeline,
+            pipeline,
             command_buffers,
-            _test_model: model,
+            test_model: model,
         }
     }
 
-    /// Creates and records new Vulkan command buffers for every framebuffer
+    fn recreate_swapchain(&mut self) {
+        // Wait until the device is finished with the current swapchain before recreating ti
+        unsafe {
+            self.device
+                .device
+                .device_wait_idle()
+                .expect("Failed to wait for GPU to idle");
+        };
+
+        // Recreate swapchain
+        self.swapchain =
+            Swapchain::from_old_swapchain(self.device.clone(), self.swapchain.swapchain);
+        if self.swapchain.framebuffers.len() != self.command_buffers.len() {
+            self.free_command_buffers();
+            self.command_buffers = App::create_command_buffers(
+                &self.device.device,
+                self.device.command_pool,
+                self.swapchain.framebuffers.len() as u32,
+            );
+        }
+
+        self.pipeline = Pipeline::new(
+            self.device.clone(),
+            Path::new("shaders/simple-shader"),
+            self.swapchain.render_pass,
+        );
+    }
+
+    /// Creates new Vulkan command buffers for every framebuffer
     ///
-    /// The command buffers only bind a graphics pipeline and draw 3 vertices
+    /// Nothing is recorded into the command buffers
     fn create_command_buffers(
         device: &ash::Device,
         command_pool: vk::CommandPool,
-        graphics_pipeline: vk::Pipeline,
-        framebuffers: &Vec<vk::Framebuffer>,
-        render_pass: vk::RenderPass,
-        surface_extent: vk::Extent2D,
-        model: &Model,
+        amount: u32,
     ) -> Vec<vk::CommandBuffer> {
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
-            .command_buffer_count(framebuffers.len() as u32)
+            .command_buffer_count(amount)
             .command_pool(command_pool)
             .level(vk::CommandBufferLevel::PRIMARY);
 
@@ -101,55 +120,93 @@ impl App {
                 .expect("Failed to allocate command buffers")
         };
 
-        for (i, &command_buffer) in command_buffers.iter().enumerate() {
-            let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE);
+        command_buffers
+    }
 
-            unsafe {
-                device
-                    .begin_command_buffer(command_buffer, &command_buffer_begin_info)
-                    .expect("Failed to begin recording to command buffer")
-            };
+    /// Frees all the command buffers currently in the command pool
+    fn free_command_buffers(&mut self) {
+        unsafe {
+            self.device
+                .device
+                .free_command_buffers(self.device.command_pool, &self.command_buffers);
+        };
+        self.command_buffers.clear();
+    }
 
-            let clear_values = [vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.1, 0.1, 0.1, 1.0],
-                },
+    /// Records commands for a command buffer
+    ///
+    /// The commands consist of creating a viewport, binding the pipeline, and drawing the model
+    fn record_command_buffer(&mut self, index: usize) {
+        let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE);
+
+        unsafe {
+            self.device
+                .device
+                .begin_command_buffer(self.command_buffers[index], &command_buffer_begin_info)
+                .expect("Failed to begin recording to command buffer")
+        };
+
+        let clear_values = [vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [0.1, 0.1, 0.1, 1.0],
+            },
+        }];
+
+        let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(self.swapchain.render_pass)
+            .framebuffer(self.swapchain.framebuffers[index])
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain.extent,
+            })
+            .clear_values(&clear_values);
+
+        unsafe {
+            self.device.device.cmd_begin_render_pass(
+                self.command_buffers[index],
+                &render_pass_begin_info,
+                vk::SubpassContents::INLINE,
+            );
+
+            let viewports = [vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: self.swapchain.extent.width as f32,
+                height: self.swapchain.extent.height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
             }];
 
-            let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
-                .render_pass(render_pass)
-                .framebuffer(framebuffers[i])
-                .render_area(vk::Rect2D {
-                    offset: vk::Offset2D { x: 0, y: 0 },
-                    extent: surface_extent,
-                })
-                .clear_values(&clear_values);
+            let scissors = [vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain.extent,
+            }];
 
-            unsafe {
-                device.cmd_begin_render_pass(
-                    command_buffer,
-                    &render_pass_begin_info,
-                    vk::SubpassContents::INLINE,
-                );
+            self.device
+                .device
+                .cmd_set_viewport(self.command_buffers[index], 0, &viewports);
+            self.device
+                .device
+                .cmd_set_scissor(self.command_buffers[index], 0, &scissors);
 
-                device.cmd_bind_pipeline(
-                    command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    graphics_pipeline,
-                );
+            self.device.device.cmd_bind_pipeline(
+                self.command_buffers[index],
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.graphics_pipeline,
+            );
 
-                model.bind(command_buffer);
-                model.draw(command_buffer);
+            self.test_model.bind(self.command_buffers[index]);
+            self.test_model.draw(self.command_buffers[index]);
 
-                device.cmd_end_render_pass(command_buffer);
-                device
-                    .end_command_buffer(command_buffer)
-                    .expect("Failed to finish recording command buffer");
-            }
+            self.device
+                .device
+                .cmd_end_render_pass(self.command_buffers[index]);
+            self.device
+                .device
+                .end_command_buffer(self.command_buffers[index])
+                .expect("Failed to finish recording command buffer");
         }
-
-        command_buffers
     }
 
     /// Initialises a winit window, returning the initialised window
@@ -172,7 +229,27 @@ impl App {
                 _ => {}
             },
             Event::MainEventsCleared => self.window.request_redraw(),
-            Event::RedrawRequested(_) => self.swapchain.draw_frame(&self.command_buffers),
+            Event::RedrawRequested(_) => {
+                let (image_index, is_sub_optimal) = self.swapchain.acquire_next_image();
+                if is_sub_optimal {
+                    self.recreate_swapchain();
+                    return;
+                }
+
+                self.record_command_buffer(image_index as usize);
+                let is_sub_optimal = self.swapchain.submit_command_buffers(
+                    self.command_buffers[image_index as usize],
+                    image_index as usize,
+                );
+
+                if is_sub_optimal.is_err() {
+                    self.recreate_swapchain();
+                    return;
+                } else if is_sub_optimal.unwrap() {
+                    self.recreate_swapchain();
+                    return;
+                }
+            }
             Event::LoopDestroyed => {
                 unsafe {
                     self.device
