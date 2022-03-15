@@ -96,5 +96,7 @@ pub fn setup_debug_utils(
             .expect("Failed to create debug messenger")
     };
 
+    log::info!("Initialized Vulkan debugger");
+
     (debug_utils_loader, debug_messenger)
 }
