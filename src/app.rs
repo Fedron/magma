@@ -32,8 +32,7 @@ impl App {
 
         let pipeline = Pipeline::new(
             device.clone(),
-            Path::new("shaders/spv/simple.vert.spv"),
-            Path::new("shaders/spv/simple.frag.spv"),
+            Path::new("shaders/simple-shader"),
             swapchain.extent,
             swapchain.render_pass,
         );
