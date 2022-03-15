@@ -1,5 +1,5 @@
 use ash::vk;
-use std::{ffi::CString, path::Path};
+use std::{ffi::CString, path::Path, rc::Rc};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -8,55 +8,17 @@ use winit::{
 
 use crate::{
     utils,
-    vulkan::device::{Device, QueueFamilyIndices},
+    vulkan::{device::{Device, QueueFamilyIndices}, swapchain::Swapchain},
 };
-
-const WINDOW_TITLE: &'static str = "Magma";
-
-/// Contains information about a Vulkan swapchain
-struct Swapchain {
-    /// Manages the underlying Vulkan swapchain
-    loader: ash::extensions::khr::Swapchain,
-    /// Handle to Vulkan swapchain
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkSwapchainKHR.html
-    swapchain: vk::SwapchainKHR,
-    /// Images that can be be drawn to and presented
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImage.html
-    images: Vec<vk::Image>,
-    /// Color format for all images
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkFormat.html
-    format: vk::Format,
-    /// Size, in pixels, of the swapchain
-    extent: vk::Extent2D,
-}
-
-/// Contains Vulkan synchronization objects for syncing the CPU and GPU
-struct SynchronizationObjects {
-    image_available_semaphores: Vec<vk::Semaphore>,
-    render_finished_semaphores: Vec<vk::Semaphore>,
-    in_flight_fences: Vec<vk::Fence>,
-}
 
 /// Main application for Magma, and the entry point
 pub struct App {
     /// Handle to winit window
     window: winit::window::Window,
 
-    device: Device,
-
-    /// Handle to the current swapchain for rendering
+    device: Rc<Device>,
     swapchain: Swapchain,
-    /// Handles to Vulkan image views for each image in the swapchain
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageView.html
-    swapchain_image_views: Vec<vk::ImageView>,
-    swapchain_framebuffers: Vec<vk::Framebuffer>,
-
-    /// Handle to Vulkan render pass being used by the graphics pipeline
-    render_pass: vk::RenderPass,
+    
     /// Handle to Vulkan pipeline layout used by the graphics pipeline
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPipelineLayout.html
@@ -74,11 +36,6 @@ pub struct App {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkCommandBuffer.html
     command_buffers: Vec<vk::CommandBuffer>,
-
-    /// Wrapper for our Vulkan synchronization objection
-    sync_objects: SynchronizationObjects,
-    /// Index of frame being worked on (0 to number of framebuffers)
-    current_frame: usize,
 }
 
 impl App {
@@ -87,7 +44,8 @@ impl App {
     /// Loads the Vulkan library and then creates a Vulkan instance
     pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> App {
         let window = App::init_window(event_loop);
-        let device = Device::new(&window);
+        let device = Rc::new(Device::new(&window));
+        let swapchain = Swapchain::new(device.clone());
 
         let family_indices = Device::find_queue_family(
             &device.instance,
@@ -95,214 +53,31 @@ impl App {
             &device.surface_loader,
             &device.surface,
         );
-
-        let swapchain = App::create_swapchain(
-            &device.instance,
-            &device.device,
-            device.physical_device,
-            &device.surface_loader,
-            &device.surface,
-            &family_indices,
-        );
-        let swapchain_image_views =
-            App::create_image_views(&device.device, swapchain.format, &swapchain.images);
-
-        let render_pass = App::create_render_pass(&device.device, swapchain.format);
+        
         let (graphics_pipeline, pipeline_layout) =
-            App::create_graphics_pipeline(&device.device, render_pass, swapchain.extent);
-
-        let swapchain_framebuffers = App::create_framebuffers(
-            &device.device,
-            render_pass,
-            &swapchain_image_views,
-            &swapchain.extent,
-        );
+            App::create_graphics_pipeline(&device.device, swapchain.render_pass, swapchain.extent);
 
         let command_pool = App::create_command_pool(&device.device, &family_indices);
         let command_buffers = App::create_command_buffers(
             &device.device,
             command_pool,
             graphics_pipeline,
-            &swapchain_framebuffers,
-            render_pass,
+            &swapchain.framebuffers,
+            swapchain.render_pass,
             swapchain.extent,
         );
-
-        let sync_objects = App::create_sync_objects(&device.device);
 
         App {
             window,
             device,
-
             swapchain,
-            swapchain_image_views,
-            swapchain_framebuffers,
 
-            render_pass,
             pipeline_layout,
             graphics_pipeline,
 
             command_pool,
             command_buffers,
-
-            sync_objects,
-            current_frame: 0,
         }
-    }
-
-    /// Creates a Vulkan swapchain
-    fn create_swapchain(
-        instance: &ash::Instance,
-        device: &ash::Device,
-        physical_device: vk::PhysicalDevice,
-        surface_loader: &ash::extensions::khr::Surface,
-        surface: &vk::SurfaceKHR,
-        queue_family: &QueueFamilyIndices,
-    ) -> Swapchain {
-        let swapchain_support =
-            Device::query_swapchain_support(physical_device, surface_loader, surface);
-        let surface_format = App::choose_swapchain_format(&swapchain_support.formats);
-        let present_mode = App::choose_swapchain_present_mode(&swapchain_support.present_modes);
-        let extent = App::choose_swapchain_extent(&swapchain_support.capabilities);
-
-        // Determine the number of images we want to use
-        let image_count = swapchain_support.capabilities.min_image_count + 1;
-        let image_count = if swapchain_support.capabilities.max_image_count > 0
-            && image_count > swapchain_support.capabilities.max_image_count
-        {
-            swapchain_support.capabilities.max_image_count
-        } else {
-            image_count
-        };
-
-        let (image_sharing_mode, queue_family_indices) =
-            if queue_family.graphics_family != queue_family.present_family {
-                (
-                    vk::SharingMode::CONCURRENT,
-                    vec![
-                        queue_family.graphics_family.unwrap(),
-                        queue_family.present_family.unwrap(),
-                    ],
-                )
-            } else {
-                (vk::SharingMode::EXCLUSIVE, vec![])
-            };
-
-        let create_info = vk::SwapchainCreateInfoKHR::builder()
-            .surface(*surface)
-            .min_image_count(image_count)
-            .image_color_space(surface_format.color_space)
-            .image_format(surface_format.format)
-            .image_extent(extent)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-            .image_sharing_mode(image_sharing_mode)
-            .queue_family_indices(&queue_family_indices)
-            .pre_transform(swapchain_support.capabilities.current_transform)
-            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(present_mode)
-            .clipped(true)
-            .image_array_layers(1);
-
-        let loader = ash::extensions::khr::Swapchain::new(instance, device);
-        let swapchain = unsafe {
-            loader
-                .create_swapchain(&create_info, None)
-                .expect("Failed to create swapchain")
-        };
-
-        let images = unsafe {
-            loader
-                .get_swapchain_images(swapchain)
-                .expect("Failed te get swapchain images")
-        };
-
-        Swapchain {
-            loader,
-            swapchain,
-            images,
-            format: surface_format.format,
-            extent,
-        }
-    }
-
-    /// Chooses the most optimal format for the application
-    fn choose_swapchain_format(
-        available_formats: &Vec<vk::SurfaceFormatKHR>,
-    ) -> vk::SurfaceFormatKHR {
-        for available_format in available_formats {
-            if available_format.format == vk::Format::B8G8R8A8_SRGB
-                && available_format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
-            {
-                return available_format.clone();
-            }
-        }
-
-        available_formats.first().unwrap().clone()
-    }
-
-    /// Chooses the most optimal present mode for the application
-    fn choose_swapchain_present_mode(
-        available_present_modes: &Vec<vk::PresentModeKHR>,
-    ) -> vk::PresentModeKHR {
-        if available_present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
-            vk::PresentModeKHR::MAILBOX
-        } else {
-            vk::PresentModeKHR::FIFO
-        }
-    }
-
-    /// Chooses the most optimal extent for the application
-    fn choose_swapchain_extent(capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
-        if capabilities.current_extent.width != std::u32::MAX {
-            capabilities.current_extent
-        } else {
-            vk::Extent2D {
-                width: utils::constants::WINDOW_WIDTH.clamp(
-                    capabilities.min_image_extent.width,
-                    capabilities.max_image_extent.width,
-                ),
-                height: utils::constants::WINDOW_HEIGHT.clamp(
-                    capabilities.min_image_extent.height,
-                    capabilities.max_image_extent.height,
-                ),
-            }
-        }
-    }
-
-    /// Creates an image view for every image
-    fn create_image_views(
-        device: &ash::Device,
-        surface_format: vk::Format,
-        images: &Vec<vk::Image>,
-    ) -> Vec<vk::ImageView> {
-        let mut image_views: Vec<vk::ImageView> = Vec::new();
-        for &image in images.iter() {
-            let create_info = vk::ImageViewCreateInfo::builder()
-                .view_type(vk::ImageViewType::TYPE_2D)
-                .format(surface_format)
-                .components(vk::ComponentMapping {
-                    r: vk::ComponentSwizzle::IDENTITY,
-                    g: vk::ComponentSwizzle::IDENTITY,
-                    b: vk::ComponentSwizzle::IDENTITY,
-                    a: vk::ComponentSwizzle::IDENTITY,
-                })
-                .subresource_range(vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .image(image);
-
-            image_views.push(unsafe {
-                device
-                    .create_image_view(&create_info, None)
-                    .expect("Failed to create image view")
-            });
-        }
-
-        image_views
     }
 
     /// Creates a new Vulkan graphics pipeline
@@ -485,79 +260,6 @@ impl App {
             .collect::<Vec<u8>>()
     }
 
-    /// Creates a new render pass for a graphics pipeline
-    fn create_render_pass(device: &ash::Device, surface_format: vk::Format) -> vk::RenderPass {
-        let color_attachment = vk::AttachmentDescription::builder()
-            .format(surface_format)
-            .samples(vk::SampleCountFlags::TYPE_1)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::STORE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-            .build();
-
-        let color_attachment_ref = [vk::AttachmentReference {
-            attachment: 0,
-            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        }];
-
-        let subpasses = [vk::SubpassDescription::builder()
-            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .color_attachments(&color_attachment_ref)
-            .build()];
-
-        let subpass_dependencies = [vk::SubpassDependency {
-            src_subpass: vk::SUBPASS_EXTERNAL,
-            dst_subpass: 0,
-            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            src_access_mask: vk::AccessFlags::empty(),
-            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-            dependency_flags: vk::DependencyFlags::empty(),
-        }];
-
-        let render_pass_attachments = [color_attachment];
-        let render_pass_info = vk::RenderPassCreateInfo::builder()
-            .attachments(&render_pass_attachments)
-            .subpasses(&subpasses)
-            .dependencies(&subpass_dependencies);
-
-        unsafe {
-            device
-                .create_render_pass(&render_pass_info, None)
-                .expect("Failed to create render pass")
-        }
-    }
-
-    /// Creates framebuffers for every swapchain image view
-    fn create_framebuffers(
-        device: &ash::Device,
-        render_pass: vk::RenderPass,
-        image_views: &Vec<vk::ImageView>,
-        swapchain_extent: &vk::Extent2D,
-    ) -> Vec<vk::Framebuffer> {
-        let mut framebuffers: Vec<vk::Framebuffer> = Vec::new();
-        for &image_view in image_views.iter() {
-            let attachments = [image_view];
-
-            let framebuffer_info = vk::FramebufferCreateInfo::builder()
-                .render_pass(render_pass)
-                .attachments(&attachments)
-                .width(swapchain_extent.width)
-                .height(swapchain_extent.height)
-                .layers(1);
-
-            framebuffers.push(unsafe {
-                device
-                    .create_framebuffer(&framebuffer_info, None)
-                    .expect("Failed to create framebuffer")
-            });
-        }
-
-        framebuffers
-    }
-
     /// Creates a new Vulkan command pool on a device
     fn create_command_pool(
         device: &ash::Device,
@@ -644,119 +346,16 @@ impl App {
         command_buffers
     }
 
-    /// Creates Vulkan semaphores and fences to allow for synchronization between the CPU and GPU
-    fn create_sync_objects(device: &ash::Device) -> SynchronizationObjects {
-        let mut sync_objects = SynchronizationObjects {
-            image_available_semaphores: vec![],
-            render_finished_semaphores: vec![],
-            in_flight_fences: vec![],
-        };
-
-        let semaphore_info = vk::SemaphoreCreateInfo::default();
-        let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
-
-        for _ in 0..utils::constants::MAX_FRAMES_IN_FLIGHT {
-            unsafe {
-                sync_objects.image_available_semaphores.push(
-                    device
-                        .create_semaphore(&semaphore_info, None)
-                        .expect("Failed to create semaphore"),
-                );
-                sync_objects.render_finished_semaphores.push(
-                    device
-                        .create_semaphore(&semaphore_info, None)
-                        .expect("Failed to create semaphore"),
-                );
-                sync_objects.in_flight_fences.push(
-                    device
-                        .create_fence(&fence_info, None)
-                        .expect("Failed to create semaphore"),
-                );
-            };
-        }
-
-        sync_objects
-    }
-
     /// Initialises a winit window, returning the initialised window
     pub fn init_window(event_loop: &EventLoop<()>) -> Window {
         WindowBuilder::new()
-            .with_title(WINDOW_TITLE)
+            .with_title(utils::constants::WINDOW_TITLE)
             .with_inner_size(winit::dpi::LogicalSize::new(
                 utils::constants::WINDOW_WIDTH,
                 utils::constants::WINDOW_HEIGHT,
             ))
             .build(event_loop)
             .expect("")
-    }
-
-    /// Draws the newest framebuffer to the window
-    pub fn draw_frame(&mut self) {
-        // Wait for previous frame to finish drawing (blocking wait)
-        let wait_fences = [self.sync_objects.in_flight_fences[self.current_frame]];
-
-        let (image_index, _) = unsafe {
-            self.device
-                .device
-                .wait_for_fences(&wait_fences, true, std::u64::MAX)
-                .expect("Failed to wait for fences");
-
-            self.swapchain
-                .loader
-                .acquire_next_image(
-                    self.swapchain.swapchain,
-                    std::u64::MAX,
-                    self.sync_objects.image_available_semaphores[self.current_frame],
-                    vk::Fence::null(),
-                )
-                .expect("Failed to acquire next image")
-        };
-
-        // Get GPU to start working on the next frame
-        let wait_semaphores = [self.sync_objects.image_available_semaphores[self.current_frame]];
-        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let signal_semaphores = [self.sync_objects.render_finished_semaphores[self.current_frame]];
-
-        let command_buffers = [self.command_buffers[image_index as usize]];
-        let submit_infos = [vk::SubmitInfo::builder()
-            .wait_semaphores(&wait_semaphores)
-            .wait_dst_stage_mask(&wait_stages)
-            .command_buffers(&command_buffers)
-            .signal_semaphores(&signal_semaphores)
-            .build()];
-
-        unsafe {
-            self.device
-                .device
-                .reset_fences(&wait_fences)
-                .expect("Failed to reset fences");
-
-            self.device
-                .device
-                .queue_submit(
-                    self.device.graphics_queue,
-                    &submit_infos,
-                    self.sync_objects.in_flight_fences[self.current_frame],
-                )
-                .expect("Failed to execute queue submit")
-        };
-
-        // Present the frame that just finished drawing
-        let swapchains = [self.swapchain.swapchain];
-        let image_indices = [image_index];
-        let present_info = vk::PresentInfoKHR::builder()
-            .wait_semaphores(&signal_semaphores)
-            .swapchains(&swapchains)
-            .image_indices(&image_indices);
-
-        unsafe {
-            self.swapchain
-                .loader
-                .queue_present(self.device.present_queue, &present_info)
-                .expect("Failed to execute queue present");
-        };
-
-        self.current_frame = (self.current_frame + 1) % utils::constants::MAX_FRAMES_IN_FLIGHT;
     }
 
     /// Runs the winit event loop, which wraps the App main loop
@@ -767,7 +366,7 @@ impl App {
                 _ => {}
             },
             Event::MainEventsCleared => self.window.request_redraw(),
-            Event::RedrawRequested(_) => self.draw_frame(),
+            Event::RedrawRequested(_) => self.swapchain.draw_frame(&self.command_buffers),
             Event::LoopDestroyed => {
                 unsafe {
                     self.device
@@ -784,25 +383,9 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
-            for i in 0..utils::constants::MAX_FRAMES_IN_FLIGHT {
-                self.device
-                    .device
-                    .destroy_semaphore(self.sync_objects.image_available_semaphores[i], None);
-                self.device
-                    .device
-                    .destroy_semaphore(self.sync_objects.render_finished_semaphores[i], None);
-                self.device
-                    .device
-                    .destroy_fence(self.sync_objects.in_flight_fences[i], None);
-            }
-
             self.device
                 .device
                 .destroy_command_pool(self.command_pool, None);
-
-            for &framebuffer in self.swapchain_framebuffers.iter() {
-                self.device.device.destroy_framebuffer(framebuffer, None);
-            }
 
             self.device
                 .device
@@ -810,17 +393,6 @@ impl Drop for App {
             self.device
                 .device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device
-                .device
-                .destroy_render_pass(self.render_pass, None);
-
-            for &image_view in self.swapchain_image_views.iter() {
-                self.device.device.destroy_image_view(image_view, None);
-            }
-
-            self.swapchain
-                .loader
-                .destroy_swapchain(self.swapchain.swapchain, None);
         };
     }
 }
