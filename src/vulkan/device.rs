@@ -152,7 +152,8 @@ impl Device {
         let engine_name = CString::new("Magma").unwrap();
         let app_info = vk::ApplicationInfo::builder()
             .application_name(&app_name)
-            .engine_name(&engine_name);
+            .engine_name(&engine_name)
+            .api_version(vk::make_api_version(0, 1, 2, 0));
 
         let enabled_layer_names = if utils::constants::ENABLE_VALIDATION_LAYERS {
             utils::constants::VALIDATION_LAYERS
@@ -453,7 +454,12 @@ impl Device {
             .map(|t| t.as_ptr())
             .collect();
 
+        let mut vulkan_memory_model_features = vk::PhysicalDeviceVulkanMemoryModelFeatures::builder()
+            .vulkan_memory_model(true)
+            .build();
+
         let device_info = vk::DeviceCreateInfo::builder()
+            .push_next(&mut vulkan_memory_model_features)
             .queue_create_infos(&queue_infos)
             .enabled_features(&physical_device_features)
             .enabled_layer_names(&required_validation_layers)
