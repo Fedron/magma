@@ -7,6 +7,7 @@ use winit::{
 };
 
 use crate::{
+    model::{Model, Vertex},
     utils,
     vulkan::{device::Device, pipeline::Pipeline, swapchain::Swapchain},
 };
@@ -19,6 +20,8 @@ pub struct App {
     swapchain: Swapchain,
     _pipeline: Pipeline,
     command_buffers: Vec<vk::CommandBuffer>,
+
+    _test_model: Model,
 }
 
 impl App {
@@ -37,6 +40,24 @@ impl App {
             swapchain.render_pass,
         );
 
+        let model = Model::new(
+            device.clone(),
+            vec![
+                Vertex {
+                    position: [0.0, -0.5],
+                    color: [1.0, 0.0, 0.0],
+                },
+                Vertex {
+                    position: [0.5, 0.5],
+                    color: [0.0, 1.0, 0.0],
+                },
+                Vertex {
+                    position: [-0.5, 0.5],
+                    color: [0.0, 0.0, 1.0],
+                },
+            ],
+        );
+
         let command_buffers = App::create_command_buffers(
             &device.device,
             device.command_pool,
@@ -44,6 +65,7 @@ impl App {
             &swapchain.framebuffers,
             swapchain.render_pass,
             swapchain.extent,
+            &model,
         );
 
         App {
@@ -52,6 +74,7 @@ impl App {
             swapchain,
             _pipeline: pipeline,
             command_buffers,
+            _test_model: model,
         }
     }
 
@@ -65,6 +88,7 @@ impl App {
         framebuffers: &Vec<vk::Framebuffer>,
         render_pass: vk::RenderPass,
         surface_extent: vk::Extent2D,
+        model: &Model,
     ) -> Vec<vk::CommandBuffer> {
         let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
             .command_buffer_count(framebuffers.len() as u32)
@@ -114,7 +138,9 @@ impl App {
                     vk::PipelineBindPoint::GRAPHICS,
                     graphics_pipeline,
                 );
-                device.cmd_draw(command_buffer, 3, 1, 0, 0);
+
+                model.bind(command_buffer);
+                model.draw(command_buffer);
 
                 device.cmd_end_render_pass(command_buffer);
                 device

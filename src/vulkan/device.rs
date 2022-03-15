@@ -93,6 +93,7 @@ pub struct Device {
     pub command_pool: vk::CommandPool,
 }
 
+/// Constructors to create a device
 impl Device {
     /// Creates a new Vulkan instance and logical device
     pub fn new(window: &winit::window::Window) -> Device {
@@ -454,9 +455,10 @@ impl Device {
             .map(|t| t.as_ptr())
             .collect();
 
-        let mut vulkan_memory_model_features = vk::PhysicalDeviceVulkanMemoryModelFeatures::builder()
-            .vulkan_memory_model(true)
-            .build();
+        let mut vulkan_memory_model_features =
+            vk::PhysicalDeviceVulkanMemoryModelFeatures::builder()
+                .vulkan_memory_model(true)
+                .build();
 
         let device_info = vk::DeviceCreateInfo::builder()
             .push_next(&mut vulkan_memory_model_features)
@@ -487,6 +489,71 @@ impl Device {
                 .create_command_pool(&create_info, None)
                 .expect("Failed to create command pool")
         }
+    }
+}
+
+impl Device {
+    /// Helper function to create a new buffer on the GPU that is synchronized with the CPU and writeable to by the CPU
+    ///
+    /// Returns the buffer that was created, and the device memory allocated to it
+    pub fn create_buffer(
+        &self,
+        size: vk::DeviceSize,
+        usage: vk::BufferUsageFlags,
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let buffer_info = vk::BufferCreateInfo::builder()
+            .size(size)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let buffer = unsafe {
+            self.device
+                .create_buffer(&buffer_info, None)
+                .expect("Failed to create buffer")
+        };
+
+        let memory_requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
+
+        let allocate_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(memory_requirements.size)
+            .memory_type_index(Device::find_memory_type(
+                memory_requirements.memory_type_bits,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                unsafe {
+                    self.instance
+                        .get_physical_device_memory_properties(self.physical_device)
+                },
+            ));
+
+        let buffer_memory = unsafe {
+            self.device
+                .allocate_memory(&allocate_info, None)
+                .expect("Failed to allocate buffer memory")
+        };
+
+        unsafe {
+            self.device
+                .bind_buffer_memory(buffer, buffer_memory, 0)
+                .expect("Failed to bind buffer memory");
+        };
+
+        (buffer, buffer_memory)
+    }
+
+    fn find_memory_type(
+        type_filter: u32,
+        required_properties: vk::MemoryPropertyFlags,
+        memory_properties: vk::PhysicalDeviceMemoryProperties,
+    ) -> u32 {
+        for (i, memory_type) in memory_properties.memory_types.iter().enumerate() {
+            if (type_filter & (1 << i)) > 0
+                && memory_type.property_flags.contains(required_properties)
+            {
+                return i as u32;
+            }
+        }
+
+        panic!("Failed to find a suitable memory type")
     }
 }
 

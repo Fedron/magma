@@ -1,6 +1,8 @@
 use ash::vk;
 use std::{path::Path, rc::Rc};
 
+use crate::model::Vertex;
+
 use super::device::Device;
 
 pub struct Pipeline {
@@ -48,9 +50,11 @@ impl Pipeline {
         ];
 
         // Create the graphics pipeline
+        let attribute_descriptions = Vertex::get_attribute_descriptions();
+        let binding_descriptions = Vertex::get_binding_descriptions();
         let vertex_input_state_info = vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_attribute_descriptions(&[])
-            .vertex_binding_descriptions(&[]);
+            .vertex_attribute_descriptions(&attribute_descriptions)
+            .vertex_binding_descriptions(&binding_descriptions);
 
         let vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
             .primitive_restart_enable(false)

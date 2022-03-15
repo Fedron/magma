@@ -5,7 +5,7 @@
     register_attr(spirv)
 )]
 
-use spirv_std::glam::{vec2, vec3, vec4, Vec2, Vec3, Vec4};
+use spirv_std::glam::{vec4, Vec2, Vec3, Vec4};
 #[cfg(not(target_arch = "spirv"))]
 use spirv_std::macros::spirv;
 
@@ -19,17 +19,11 @@ pub fn main_fs(
 
 #[spirv(vertex)]
 pub fn main_vs(
-    #[spirv(vertex_index)] vert_id: i32,
+    in_pos: Vec2,
+    in_color: Vec3,
     #[spirv(position, invariant)] out_pos: &mut Vec4,
     frag_color: &mut Vec3,
 ) {
-    let positions: [Vec2; 3] = [vec2(0.0, -0.5), vec2(0.5, 0.5), vec2(-0.5, 0.5)];
-    let colors: [Vec3; 3] = [
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
-        vec3(0.0, 0.0, 1.0),
-    ];
-
-    *out_pos = vec4(positions[vert_id as usize].x, positions[vert_id as usize].y, 0.0, 1.0);
-    *frag_color = colors[vert_id as usize];
+    *out_pos = vec4(in_pos.x, in_pos.y, 0.0, 1.0);
+    *frag_color = in_color;
 }
