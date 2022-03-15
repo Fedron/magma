@@ -482,6 +482,7 @@ impl Device {
         queue_family: &QueueFamilyIndices,
     ) -> vk::CommandPool {
         let create_info = vk::CommandPoolCreateInfo::builder()
+            .flags(vk::CommandPoolCreateFlags::TRANSIENT | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
             .queue_family_index(queue_family.graphics_family.unwrap());
 
         unsafe {

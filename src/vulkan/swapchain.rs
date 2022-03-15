@@ -23,8 +23,7 @@ pub struct Swapchain {
     /// Handle to Vulkan swapchain
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkSwapchainKHR.html
-    swapchain: vk::SwapchainKHR,
-
+    pub swapchain: vk::SwapchainKHR,
     /// Color format for all images
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkFormat.html
@@ -52,6 +51,8 @@ pub struct Swapchain {
     render_finished_semaphores: Vec<vk::Semaphore>,
     /// Fences for each image that is currently being worked on
     in_flight_fences: Vec<vk::Fence>,
+    /// Fences for each image that is currently in flight
+    images_in_flight: Vec<vk::Fence>,
     /// Index of frame being worked on (0 to number of framebuffers)
     current_frame: usize,
 }
@@ -77,6 +78,7 @@ impl Swapchain {
             &device.surface_loader,
             &device.surface,
             &family_indices,
+            None,
         );
 
         let image_views = Swapchain::create_image_views(
@@ -93,15 +95,18 @@ impl Swapchain {
             &vk_swapchain.extent,
         );
 
-        let (image_available_semaphores, render_finished_semaphores, in_flight_fences) =
-            Swapchain::create_sync_objects(&device.device);
+        let (
+            image_available_semaphores,
+            render_finished_semaphores,
+            in_flight_fences,
+            images_in_flight,
+        ) = Swapchain::create_sync_objects(&device.device, vk_swapchain.images.len());
 
         Swapchain {
             device,
 
             loader: vk_swapchain.loader,
             swapchain: vk_swapchain.swapchain,
-
             _format: vk_swapchain.format,
             extent: vk_swapchain.extent,
 
@@ -114,6 +119,73 @@ impl Swapchain {
             image_available_semaphores,
             render_finished_semaphores,
             in_flight_fences,
+            images_in_flight,
+            current_frame: 0,
+        }
+    }
+
+    /// Creates a new swapchain, much the same as new(), with the exception that is used a previous Vulkan swapchain
+    /// to create the new swapchain from
+    pub fn from_old_swapchain(
+        device: Rc<Device>,
+        previous_swapchain: vk::SwapchainKHR,
+    ) -> Swapchain {
+        let family_indices = Device::find_queue_family(
+            &device.instance,
+            device.physical_device,
+            &device.surface_loader,
+            &device.surface,
+        );
+
+        let vk_swapchain = Swapchain::create_swapchain(
+            &device.instance,
+            &device.device,
+            device.physical_device,
+            &device.surface_loader,
+            &device.surface,
+            &family_indices,
+            Some(previous_swapchain),
+        );
+
+        let image_views = Swapchain::create_image_views(
+            &device.device,
+            vk_swapchain.format,
+            &vk_swapchain.images,
+        );
+
+        let render_pass = Swapchain::create_render_pass(&device.device, vk_swapchain.format);
+        let framebuffers = Swapchain::create_framebuffers(
+            &device.device,
+            render_pass,
+            &image_views,
+            &vk_swapchain.extent,
+        );
+
+        let (
+            image_available_semaphores,
+            render_finished_semaphores,
+            in_flight_fences,
+            images_in_flight,
+        ) = Swapchain::create_sync_objects(&device.device, vk_swapchain.images.len());
+
+        Swapchain {
+            device,
+
+            loader: vk_swapchain.loader,
+            swapchain: vk_swapchain.swapchain,
+            _format: vk_swapchain.format,
+            extent: vk_swapchain.extent,
+
+            _images: vk_swapchain.images,
+            image_views,
+
+            render_pass,
+            framebuffers,
+
+            image_available_semaphores,
+            render_finished_semaphores,
+            in_flight_fences,
+            images_in_flight,
             current_frame: 0,
         }
     }
@@ -128,6 +200,7 @@ impl Swapchain {
         surface_loader: &ash::extensions::khr::Surface,
         surface: &vk::SurfaceKHR,
         queue_family: &QueueFamilyIndices,
+        old_swapchain: Option<vk::SwapchainKHR>,
     ) -> VulkanSwapchain {
         let swapchain_support =
             Device::query_swapchain_support(physical_device, surface_loader, surface);
@@ -172,7 +245,8 @@ impl Swapchain {
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(present_mode)
             .clipped(true)
-            .image_array_layers(1);
+            .image_array_layers(1)
+            .old_swapchain(old_swapchain.unwrap_or(vk::SwapchainKHR::null()));
 
         let loader = ash::extensions::khr::Swapchain::new(instance, device);
         let swapchain = unsafe {
@@ -352,8 +426,14 @@ impl Swapchain {
     /// Helper constructor that creates the required semaphores and fences for synchronization between the CPU and GPU
     fn create_sync_objects(
         device: &ash::Device,
-    ) -> (Vec<vk::Semaphore>, Vec<vk::Semaphore>, Vec<vk::Fence>) {
-        let mut sync_objects = (Vec::new(), Vec::new(), Vec::new());
+        image_count: usize,
+    ) -> (
+        Vec<vk::Semaphore>,
+        Vec<vk::Semaphore>,
+        Vec<vk::Fence>,
+        Vec<vk::Fence>,
+    ) {
+        let mut sync_objects = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
 
         let semaphore_info = vk::SemaphoreCreateInfo::default();
         let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
@@ -378,18 +458,24 @@ impl Swapchain {
             };
         }
 
+        for _ in 0..image_count {
+            sync_objects.3.push(vk::Fence::null());
+        }
+
         sync_objects
     }
 }
 
 /// Public functions
 impl Swapchain {
-    /// Draws the newest framebuffer to the window
-    pub fn draw_frame(&mut self, command_buffers: &Vec<vk::CommandBuffer>) {
+    /// Acquires the next available framebuffer that can be drawn
+    ///
+    /// Returns the index of the framebuffer that was acquired, and whether the swapchain is suboptimal for the surface
+    pub fn acquire_next_image(&self) -> (u32, bool) {
         // Wait for previous frame to finish drawing (blocking wait)
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
-        let (image_index, _) = unsafe {
+        unsafe {
             self.device
                 .device
                 .wait_for_fences(&wait_fences, true, std::u64::MAX)
@@ -403,14 +489,35 @@ impl Swapchain {
                     vk::Fence::null(),
                 )
                 .expect("Failed to acquire next image")
-        };
+        }
+    }
 
-        // Get GPU to start working on the next frame
+    /// Submits a draw command buffer to the framebuffer at index, and presents it to the surface
+    ///
+    /// Returns whether the swapchain is suboptimal for the surface, and a vk::Result which contains an Vulkan specific error
+    pub fn submit_command_buffers(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        index: usize,
+    ) -> Result<bool, vk::Result> {
+        // Wait for previous image to finish getting drawn
+        if vk::Handle::as_raw(self.images_in_flight[index]) != 0 {
+            let wait_fences = [self.images_in_flight[index]];
+            unsafe {
+                self.device
+                    .device
+                    .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                    .expect("Failed to wait for fences");
+            };
+        }
+        self.images_in_flight[index] = self.in_flight_fences[self.current_frame];
+
+        // Get GPU to start working on the next frame buffer
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
         let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
 
-        let command_buffers = [command_buffers[image_index as usize]];
+        let command_buffers = [command_buffer];
         let submit_infos = [vk::SubmitInfo::builder()
             .wait_semaphores(&wait_semaphores)
             .wait_dst_stage_mask(&wait_stages)
@@ -418,10 +525,11 @@ impl Swapchain {
             .signal_semaphores(&signal_semaphores)
             .build()];
 
+        let reset_fences = [self.in_flight_fences[self.current_frame]];
         unsafe {
             self.device
                 .device
-                .reset_fences(&wait_fences)
+                .reset_fences(&reset_fences)
                 .expect("Failed to reset fences");
 
             self.device
@@ -431,24 +539,24 @@ impl Swapchain {
                     &submit_infos,
                     self.in_flight_fences[self.current_frame],
                 )
-                .expect("Failed to execute queue submit")
+                .expect("Failed to submit draw command buffer")
         };
 
         // Present the frame that just finished drawing
         let swapchains = [self.swapchain];
-        let image_indices = [image_index];
+        let image_indices = [index as u32];
         let present_info = vk::PresentInfoKHR::builder()
             .wait_semaphores(&signal_semaphores)
             .swapchains(&swapchains)
             .image_indices(&image_indices);
 
-        unsafe {
+        let result = unsafe {
             self.loader
                 .queue_present(self.device.present_queue, &present_info)
-                .expect("Failed to execute queue present");
         };
 
         self.current_frame = (self.current_frame + 1) % utils::constants::MAX_FRAMES_IN_FLIGHT;
+        result
     }
 }
 
