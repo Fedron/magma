@@ -1,5 +1,5 @@
 use ash::vk;
-use std::{path::Path, rc::Rc};
+use std::rc::Rc;
 
 use crate::model::Vertex;
 
@@ -18,7 +18,7 @@ pub struct Pipeline {
     pipeline_layout: vk::PipelineLayout,
 
     /// The shader used by the graphics pipeline
-    /// 
+    ///
     /// Should be compiled from a rust-gpu shader crate, and hence contain both an entry point for the vertex and
     /// fragment shader in one shader module
     ///
@@ -28,11 +28,7 @@ pub struct Pipeline {
 
 impl Pipeline {
     /// Creates a new graphics pipeline for a device
-    pub fn new(
-        device: Rc<Device>,
-        shader: &Path,
-        render_pass: vk::RenderPass,
-    ) -> Pipeline {
+    pub fn new(device: Rc<Device>, shader: &'static str, render_pass: vk::RenderPass) -> Pipeline {
         // Compile shaders
         let shader_module = Pipeline::create_shader_module(&device.as_ref().device, shader);
         let shader_stages = [
@@ -121,8 +117,8 @@ impl Pipeline {
             .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
         let dynamic_state_enables = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::builder()
-            .dynamic_states(&dynamic_state_enables);
+        let dynamic_state_info =
+            vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_state_enables);
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(&[])
@@ -165,22 +161,26 @@ impl Pipeline {
             device,
             graphics_pipeline,
             pipeline_layout,
-            shader_module
+            shader_module,
         }
     }
 
     /// Helper constructor that creates a new shader module from a rust-gpu crate
-    fn create_shader_module(device: &ash::Device, shader_crate: &Path) -> vk::ShaderModule {
-        let shader_path =
-            spirv_builder::SpirvBuilder::new(shader_crate, "spirv-unknown-vulkan1.1")
-                .print_metadata(spirv_builder::MetadataPrintout::None)
-                .build()
-                .unwrap()
-                .module
-                .unwrap_single()
-                .to_path_buf();
+    fn create_shader_module(device: &ash::Device, shader_crate: &'static str) -> vk::ShaderModule {
+        // FIXME: This assumes we are running an example from 'target/debug/examples'
+        let mut shader_crate_path = std::env::current_exe().unwrap();
+        shader_crate_path.pop();
+        shader_crate_path.pop();
+        shader_crate_path.pop();
+        shader_crate_path.push("spirv-unknown-vulkan1.1");
+        shader_crate_path.push("release");
+        shader_crate_path.push("deps");
+        shader_crate_path.push(format!(
+            "{}.spv.dir\\module",
+            shader_crate.replace("-", "_")
+        ));
         let shader_code =
-            ash::util::read_spv(&mut std::fs::File::open(shader_path).unwrap()).unwrap();
+            ash::util::read_spv(&mut std::fs::File::open(shader_crate_path).unwrap()).unwrap();
 
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&shader_code);
 
