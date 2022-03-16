@@ -1,5 +1,5 @@
 use ash::vk;
-use std::{path::Path, rc::Rc};
+use std::rc::Rc;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -38,11 +38,7 @@ impl App {
         let device = Rc::new(Device::new(&window));
         let swapchain = Swapchain::new(device.clone());
 
-        let pipeline = Pipeline::new(
-            device.clone(),
-            Path::new("shaders/simple-shader"),
-            swapchain.render_pass,
-        );
+        let pipeline = Pipeline::new(device.clone(), "simple-shader", swapchain.render_pass);
 
         let command_buffers = App::create_command_buffers(
             &device.device,
@@ -91,7 +87,7 @@ impl App {
 
         self.pipeline = Pipeline::new(
             self.device.clone(),
-            Path::new("shaders/simple-shader"),
+            "simple-shader",
             self.swapchain.render_pass,
         );
     }
@@ -231,7 +227,7 @@ impl App {
                 WindowEvent::Resized(size) => {
                     self.window_size = size;
                     self.recreate_swapchain();
-                },
+                }
                 _ => {}
             },
             Event::MainEventsCleared => self.window.request_redraw(),
