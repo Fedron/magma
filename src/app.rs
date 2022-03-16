@@ -7,7 +7,7 @@ use winit::{
 };
 
 use crate::{
-    model::{Model, Vertex},
+    model::Model,
     utils,
     vulkan::{device::Device, pipeline::Pipeline, swapchain::Swapchain},
 };
@@ -16,12 +16,17 @@ use crate::{
 pub struct App {
     /// Handle to winit window
     window: winit::window::Window,
-    device: Rc<Device>,
+    /// Handle to logical device
+    pub device: Rc<Device>,
+    /// Handle to currently active swapchain
     swapchain: Swapchain,
+    /// Handle to the current graphics pipeline
     pipeline: Pipeline,
+    /// List of all command buffers being used
     command_buffers: Vec<vk::CommandBuffer>,
 
-    test_model: Model,
+    /// List of all models that are being drawn
+    models: Vec<Model>,
 }
 
 impl App {
@@ -39,24 +44,6 @@ impl App {
             swapchain.render_pass,
         );
 
-        let model = Model::new(
-            device.clone(),
-            vec![
-                Vertex {
-                    position: [0.0, -0.5],
-                    color: [1.0, 0.0, 0.0],
-                },
-                Vertex {
-                    position: [0.5, 0.5],
-                    color: [0.0, 1.0, 0.0],
-                },
-                Vertex {
-                    position: [-0.5, 0.5],
-                    color: [0.0, 0.0, 1.0],
-                },
-            ],
-        );
-
         let command_buffers = App::create_command_buffers(
             &device.device,
             device.command_pool,
@@ -69,7 +56,7 @@ impl App {
             swapchain,
             pipeline,
             command_buffers,
-            test_model: model,
+            models: Vec::new(),
         }
     }
 
@@ -196,8 +183,10 @@ impl App {
                 self.pipeline.graphics_pipeline,
             );
 
-            self.test_model.bind(self.command_buffers[index]);
-            self.test_model.draw(self.command_buffers[index]);
+            for model in self.models.iter() {
+                model.bind(self.command_buffers[index]);
+                model.draw(self.command_buffers[index]);
+            }
 
             self.device
                 .device
@@ -219,6 +208,11 @@ impl App {
             ))
             .build(event_loop)
             .expect("")
+    }
+
+    /// Adds a new model that will be rendered
+    pub fn add_model(&mut self, model: Model) {
+        self.models.push(model);
     }
 
     /// Runs the winit event loop, which wraps the App main loop
