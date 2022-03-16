@@ -24,9 +24,9 @@ pub struct App {
     pipeline: Pipeline,
     /// List of all command buffers being used
     command_buffers: Vec<vk::CommandBuffer>,
-
     /// List of all models that are being drawn
     models: Vec<Model>,
+    window_size: winit::dpi::PhysicalSize<u32>,
 }
 
 impl App {
@@ -50,6 +50,8 @@ impl App {
             swapchain.framebuffers.len() as u32,
         );
 
+        let window_size = window.inner_size();
+
         App {
             window,
             device,
@@ -57,9 +59,11 @@ impl App {
             pipeline,
             command_buffers,
             models: Vec::new(),
+            window_size,
         }
     }
 
+    /// Recreates the swapchain and graphics pipeline to match the new window size
     fn recreate_swapchain(&mut self) {
         // Wait until the device is finished with the current swapchain before recreating ti
         unsafe {
@@ -68,6 +72,10 @@ impl App {
                 .device_wait_idle()
                 .expect("Failed to wait for GPU to idle");
         };
+
+        if self.window_size.width == 0 || self.window_size.height == 0 {
+            return;
+        }
 
         // Recreate swapchain
         self.swapchain =
@@ -220,11 +228,21 @@ impl App {
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(size) => {
+                    self.window_size = size;
+                    self.recreate_swapchain();
+                },
                 _ => {}
             },
             Event::MainEventsCleared => self.window.request_redraw(),
             Event::RedrawRequested(_) => {
-                let (image_index, is_sub_optimal) = self.swapchain.acquire_next_image();
+                let result = self.swapchain.acquire_next_image();
+                if result.is_err() {
+                    self.recreate_swapchain();
+                    return;
+                }
+
+                let (image_index, is_sub_optimal) = result.unwrap();
                 if is_sub_optimal {
                     self.recreate_swapchain();
                     return;

@@ -471,7 +471,7 @@ impl Swapchain {
     /// Acquires the next available framebuffer that can be drawn
     ///
     /// Returns the index of the framebuffer that was acquired, and whether the swapchain is suboptimal for the surface
-    pub fn acquire_next_image(&self) -> (u32, bool) {
+    pub fn acquire_next_image(&self) -> Result<(u32, bool), vk::Result> {
         // Wait for previous frame to finish drawing (blocking wait)
         let wait_fences = [self.in_flight_fences[self.current_frame]];
 
@@ -488,7 +488,6 @@ impl Swapchain {
                     self.image_available_semaphores[self.current_frame],
                     vk::Fence::null(),
                 )
-                .expect("Failed to acquire next image")
         }
     }
 
