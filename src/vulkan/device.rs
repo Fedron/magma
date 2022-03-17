@@ -50,6 +50,14 @@ pub struct SwapchainSupportInfo {
     pub present_modes: Vec<vk::PresentModeKHR>,
 }
 
+/// Wraps vk::BufferUsageFlags with the specific flags that the application supports
+#[derive(PartialEq)]
+pub struct BufferUsage(vk::BufferUsageFlags);
+impl BufferUsage {
+    pub const VERTEX: BufferUsage = BufferUsage(vk::BufferUsageFlags::VERTEX_BUFFER);
+    pub const INDICES: BufferUsage = BufferUsage(vk::BufferUsageFlags::INDEX_BUFFER);
+}
+
 /// Wraps the Vulkan steps to create a logical device
 pub struct Device {
     /// Holds the loaded Vulkan library
@@ -497,6 +505,58 @@ impl Device {
 }
 
 impl Device {
+    /// Uploads data to a buffer on the GPU through the use of a staging buffer on the CPU
+    /// 
+    /// Returns the buffer and device memory on the GPU
+    pub fn upload_buffer_with_staging<T>(
+        &self,
+        data: &Vec<T>,
+        usage: BufferUsage,
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let data_count = data.len();
+        if usage == BufferUsage::VERTEX && data_count < 3 {
+            log::error!("Cannot create a vertex buffer with less than 3 vertices");
+            panic!("Failed to create buffer, see above");
+        }
+
+        let buffer_size: vk::DeviceSize = (std::mem::size_of::<T>() * data_count) as u64;
+        let (staging_buffer, staging_buffer_memory) = self.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        unsafe {
+            let data_ptr = self
+                .device
+                .map_memory(
+                    staging_buffer_memory,
+                    0,
+                    buffer_size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .expect("Failed to map vertex buffer memory") as *mut T;
+
+            data_ptr.copy_from_nonoverlapping(data.as_ptr(), data_count);
+            self.device.unmap_memory(staging_buffer_memory);
+        };
+
+        let (buffer, buffer_memory) = self.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_DST | usage.0,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+
+        self.copy_buffer(staging_buffer, buffer, buffer_size);
+
+        unsafe {
+            self.device.destroy_buffer(staging_buffer, None);
+            self.device.free_memory(staging_buffer_memory, None)
+        };
+
+        (buffer, buffer_memory)
+    }
+
     /// Helper function to create a new buffer on the GPU
     ///
     /// Returns the buffer that was created, and the device memory allocated to it

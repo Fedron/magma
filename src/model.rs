@@ -3,7 +3,7 @@ use std::{fmt::Debug, rc::Rc};
 use ash::vk;
 use memoffset::offset_of;
 
-use crate::vulkan::device::Device;
+use crate::vulkan::device::{BufferUsage, Device};
 
 /// Represents a singe vertex with a 2D position and colour
 #[repr(C)]
@@ -56,58 +56,38 @@ pub struct Model {
     vertex_buffer_memory: vk::DeviceMemory,
     /// Total number of vertices the model consists of
     vertex_count: usize,
+    /// Handle to the Vulkan buffer holding the indices data
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkBuffer.html
+    indices_buffer: vk::Buffer,
+    /// Handle to the memory of the buffer holding the indices data
+    ///
+    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDeviceMemory.html
+    indices_buffer_memory: vk::DeviceMemory,
 }
 
 impl Model {
     /// Creates new vertex buffers for the model on the GPU from the provided vertices
-    pub fn new(device: Rc<Device>, vertices: Vec<Vertex>) -> Model {
-        let vertex_count = vertices.len();
+    pub fn new(device: Rc<Device>, vertices: Vec<Vertex>, indices: Vec<u32>) -> Model {
+        let vertex_count = indices.len();
         if vertex_count < 3 {
             log::error!("Cannot create a model with less than 3 vertices");
             panic!("Failed to create model, see above");
         }
 
-        let buffer_size: vk::DeviceSize = (std::mem::size_of::<Vertex>() * vertex_count) as u64;
-        let (staging_buffer, staging_buffer_memory) = device.create_buffer(
-            buffer_size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        );
+        let (vertex_buffer, vertex_buffer_memory) =
+            device.upload_buffer_with_staging(&vertices, BufferUsage::VERTEX);
 
-        unsafe {
-            let data = device
-                .device
-                .map_memory(
-                    staging_buffer_memory,
-                    0,
-                    buffer_size,
-                    vk::MemoryMapFlags::empty(),
-                )
-                .expect("Failed to map vertex buffer memory") as *mut Vertex;
-
-            data.copy_from_nonoverlapping(vertices.as_ptr(), vertex_count);
-
-            device.device.unmap_memory(staging_buffer_memory);
-        };
-
-        let (vertex_buffer, vertex_buffer_memory) = device.create_buffer(
-            buffer_size,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
-
-        device.copy_buffer(staging_buffer, vertex_buffer, buffer_size);
-
-        unsafe {
-            device.device.destroy_buffer(staging_buffer, None);
-            device.device.free_memory(staging_buffer_memory, None)
-        };
+        let (indices_buffer, indices_buffer_memory) =
+            device.upload_buffer_with_staging(&indices, BufferUsage::INDICES);
 
         Model {
             device,
             vertex_buffer,
             vertex_buffer_memory,
             vertex_count,
+            indices_buffer,
+            indices_buffer_memory,
         }
     }
 
@@ -116,7 +96,7 @@ impl Model {
         unsafe {
             self.device
                 .device
-                .cmd_draw(command_buffer, self.vertex_count as u32, 1, 0, 0);
+                .cmd_draw_indexed(command_buffer, self.vertex_count as u32, 1, 0, 0, 0);
         };
     }
 
@@ -129,6 +109,13 @@ impl Model {
             self.device
                 .device
                 .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
+
+            self.device.device.cmd_bind_index_buffer(
+                command_buffer,
+                self.indices_buffer,
+                0,
+                vk::IndexType::UINT32,
+            );
         };
     }
 }
@@ -140,6 +127,10 @@ impl Drop for Model {
             self.device
                 .device
                 .free_memory(self.vertex_buffer_memory, None);
-        };
+            self.device.device.destroy_buffer(self.indices_buffer, None);
+            self.device
+                .device
+                .free_memory(self.indices_buffer_memory, None);
+        }
     }
 }
