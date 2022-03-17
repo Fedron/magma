@@ -68,14 +68,17 @@ impl Model {
         }
 
         let buffer_size: vk::DeviceSize = (std::mem::size_of::<Vertex>() * vertex_count) as u64;
-        let (vertex_buffer, vertex_buffer_memory) =
-            device.create_buffer(buffer_size, vk::BufferUsageFlags::VERTEX_BUFFER);
+        let (staging_buffer, staging_buffer_memory) = device.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
 
         unsafe {
             let data = device
                 .device
                 .map_memory(
-                    vertex_buffer_memory,
+                    staging_buffer_memory,
                     0,
                     buffer_size,
                     vk::MemoryMapFlags::empty(),
@@ -84,7 +87,20 @@ impl Model {
 
             data.copy_from_nonoverlapping(vertices.as_ptr(), vertex_count);
 
-            device.device.unmap_memory(vertex_buffer_memory);
+            device.device.unmap_memory(staging_buffer_memory);
+        };
+
+        let (vertex_buffer, vertex_buffer_memory) = device.create_buffer(
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+
+        device.copy_buffer(staging_buffer, vertex_buffer, buffer_size);
+
+        unsafe {
+            device.device.destroy_buffer(staging_buffer, None);
+            device.device.free_memory(staging_buffer_memory, None)
         };
 
         Model {
