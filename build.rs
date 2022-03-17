@@ -1,4 +1,6 @@
 fn main() {
+    println!("cargo:rerun-if-changed=shaders/simple-shader/src/lib.rs");
+
     // Build all the shaders in 'shaders' before-hand so the application doesn't need to compile them at runtime
     let mut shaders_dir = std::env::current_dir().expect("Failed to get current dir");
     shaders_dir.push("shaders");

@@ -5,6 +5,23 @@ use crate::model::Vertex;
 
 use super::device::Device;
 
+#[repr(align(16))]
+#[derive(Clone, Copy, Debug)]
+pub struct Align16<T>(pub T);
+
+pub struct PushConstants {
+    pub offset: Align16<cgmath::Vector2<f32>>,
+}
+
+impl PushConstants {
+    pub unsafe fn as_bytes(&self) -> &[u8] {
+        let size_in_bytes = std::mem::size_of::<Self>();
+        let size_in_u8 = size_in_bytes / std::mem::size_of::<u8>();
+        let ptr = self as *const Self as *const u8;
+        std::slice::from_raw_parts(ptr, size_in_u8)
+    }
+}
+
 pub struct Pipeline {
     /// Handle to the device this pipeline belongs to
     device: Rc<Device>,
@@ -15,7 +32,7 @@ pub struct Pipeline {
     /// Handle to the pipeline layout for the current graphics pipeline
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPipelineLayout.html
-    pipeline_layout: vk::PipelineLayout,
+    pub layout: vk::PipelineLayout,
 
     /// The shader used by the graphics pipeline
     ///
@@ -29,12 +46,25 @@ pub struct Pipeline {
 impl Pipeline {
     /// Creates a new graphics pipeline for a device
     pub fn new(device: Rc<Device>, shader: &'static str, render_pass: vk::RenderPass) -> Pipeline {
+        let code = ash::util::read_spv(
+            &mut std::fs::File::open("shaders/simple.vert.spv").expect("Failed to open file"),
+        )
+        .expect("Failed to read spv");
+
+        let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
+        let vertex_shader_module = unsafe {
+            device
+                .device
+                .create_shader_module(&create_info, None)
+                .expect("Failed to create vert shader module")
+        };
+
         // Compile shaders
         let shader_module = Pipeline::create_shader_module(&device.as_ref().device, shader);
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::builder()
-                .module(shader_module)
-                .name(unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(b"main_vs\0") })
+                .module(vertex_shader_module)
+                .name(unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0") })
                 .stage(vk::ShaderStageFlags::VERTEX)
                 .build(),
             vk::PipelineShaderStageCreateInfo::builder()
@@ -120,9 +150,15 @@ impl Pipeline {
         let dynamic_state_info =
             vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_state_enables);
 
+        let push_constant_ranges = [vk::PushConstantRange::builder()
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .offset(0)
+            .size(std::mem::size_of::<PushConstants>() as u32)
+            .build()];
+
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(&[])
-            .push_constant_ranges(&[]);
+            .push_constant_ranges(&push_constant_ranges);
 
         let pipeline_layout = unsafe {
             device
@@ -157,10 +193,14 @@ impl Pipeline {
                 .expect("Failed to create graphics pipeline")[0]
         };
 
+        unsafe {
+            device.device.destroy_shader_module(vertex_shader_module, None);
+        };
+
         Pipeline {
             device,
             graphics_pipeline,
-            pipeline_layout,
+            layout: pipeline_layout,
             shader_module,
         }
     }
@@ -203,7 +243,7 @@ impl Drop for Pipeline {
                 .destroy_pipeline(self.graphics_pipeline, None);
             self.device
                 .device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
+                .destroy_pipeline_layout(self.layout, None);
         };
     }
 }
