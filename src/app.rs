@@ -9,7 +9,11 @@ use winit::{
 use crate::{
     model::Model,
     utils,
-    vulkan::{device::Device, pipeline::Pipeline, swapchain::Swapchain},
+    vulkan::{
+        device::Device,
+        pipeline::{Align16, Pipeline, PushConstants},
+        swapchain::Swapchain,
+    },
 };
 
 /// Main application for Magma, and the entry point
@@ -189,6 +193,19 @@ impl App {
 
             for model in self.models.iter() {
                 model.bind(self.command_buffers[index]);
+
+                let push = PushConstants {
+                    offset: Align16(cgmath::Vector2::new(0.5, 0.5)),
+                };
+
+                self.device.device.cmd_push_constants(
+                    self.command_buffers[index],
+                    self.pipeline.layout,
+                    vk::ShaderStageFlags::VERTEX,
+                    0,
+                    push.as_bytes()
+                );
+
                 model.draw(self.command_buffers[index]);
             }
 
