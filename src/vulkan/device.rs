@@ -482,7 +482,10 @@ impl Device {
         queue_family: &QueueFamilyIndices,
     ) -> vk::CommandPool {
         let create_info = vk::CommandPoolCreateInfo::builder()
-            .flags(vk::CommandPoolCreateFlags::TRANSIENT | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+            .flags(
+                vk::CommandPoolCreateFlags::TRANSIENT
+                    | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            )
             .queue_family_index(queue_family.graphics_family.unwrap());
 
         unsafe {
@@ -494,13 +497,14 @@ impl Device {
 }
 
 impl Device {
-    /// Helper function to create a new buffer on the GPU that is synchronized with the CPU and writeable to by the CPU
+    /// Helper function to create a new buffer on the GPU
     ///
     /// Returns the buffer that was created, and the device memory allocated to it
     pub fn create_buffer(
         &self,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
+        required_memory_properties: vk::MemoryPropertyFlags,
     ) -> (vk::Buffer, vk::DeviceMemory) {
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(size)
@@ -514,17 +518,18 @@ impl Device {
         };
 
         let memory_requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
+        let memory_type = Device::find_memory_type(
+            memory_requirements.memory_type_bits,
+            required_memory_properties,
+            &unsafe {
+                self.instance
+                    .get_physical_device_memory_properties(self.physical_device)
+            },
+        );
 
         let allocate_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(memory_requirements.size)
-            .memory_type_index(Device::find_memory_type(
-                memory_requirements.memory_type_bits,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-                unsafe {
-                    self.instance
-                        .get_physical_device_memory_properties(self.physical_device)
-                },
-            ));
+            .memory_type_index(memory_type);
 
         let buffer_memory = unsafe {
             self.device
@@ -541,10 +546,71 @@ impl Device {
         (buffer, buffer_memory)
     }
 
+    /// Copies the content of one buffer to another through the use of a staging buffer
+    pub fn copy_buffer(
+        &self,
+        src_buffer: vk::Buffer,
+        dst_buffer: vk::Buffer,
+        size: vk::DeviceSize,
+    ) {
+        let allocate_info = vk::CommandBufferAllocateInfo::builder()
+            .command_buffer_count(1)
+            .command_pool(self.command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY);
+
+        let command_buffers = unsafe {
+            self.device
+                .allocate_command_buffers(&allocate_info)
+                .expect("Failed to allocate command buffer")
+        };
+        let command_buffer = command_buffers[0];
+
+        let begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            self.device
+                .begin_command_buffer(command_buffer, &begin_info)
+                .expect("Failed to begin command buffer");
+
+            let copy_regions = [vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size,
+            }];
+
+            self.device
+                .cmd_copy_buffer(command_buffer, src_buffer, dst_buffer, &copy_regions);
+
+            self.device
+                .end_command_buffer(command_buffer)
+                .expect("Failed to end command buffer");
+        };
+
+        let submit_infos = [vk::SubmitInfo::builder()
+            .command_buffers(&command_buffers)
+            .build()];
+
+        unsafe {
+            self.device
+                .queue_submit(self.graphics_queue, &submit_infos, vk::Fence::null())
+                .expect("Failed to submit queue");
+
+            self.device
+                .queue_wait_idle(self.graphics_queue)
+                .expect("Failed to wait for submit queue to finish");
+
+            self.device
+                .free_command_buffers(self.command_pool, &command_buffers);
+        };
+    }
+
+    /// Finds a suitable memory type for device memory give a set of required properties and the ones supported by the
+    /// physical device
     fn find_memory_type(
         type_filter: u32,
         required_properties: vk::MemoryPropertyFlags,
-        memory_properties: vk::PhysicalDeviceMemoryProperties,
+        memory_properties: &vk::PhysicalDeviceMemoryProperties,
     ) -> u32 {
         for (i, memory_type) in memory_properties.memory_types.iter().enumerate() {
             if (type_filter & (1 << i)) > 0
