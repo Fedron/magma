@@ -1,5 +1,5 @@
 use ash::vk;
-use std::rc::Rc;
+use std::{rc::Rc, path::Path, ffi::CString};
 
 use crate::model::Vertex;
 
@@ -33,43 +33,25 @@ pub struct Pipeline {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPipelineLayout.html
     pub layout: vk::PipelineLayout,
-
-    /// The shader used by the graphics pipeline
-    ///
-    /// Should be compiled from a rust-gpu shader crate, and hence contain both an entry point for the vertex and
-    /// fragment shader in one shader module
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkShaderModule.html
-    shader_module: vk::ShaderModule,
 }
 
 impl Pipeline {
     /// Creates a new graphics pipeline for a device
-    pub fn new(device: Rc<Device>, shader: &'static str, render_pass: vk::RenderPass) -> Pipeline {
-        let code = ash::util::read_spv(
-            &mut std::fs::File::open("shaders/simple.vert.spv").expect("Failed to open file"),
-        )
-        .expect("Failed to read spv");
-
-        let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
-        let vertex_shader_module = unsafe {
-            device
-                .device
-                .create_shader_module(&create_info, None)
-                .expect("Failed to create vert shader module")
-        };
+    pub fn new(device: Rc<Device>, render_pass: vk::RenderPass) -> Pipeline {
+        let vertex_shader_module = Pipeline::create_shader_module(&device.as_ref().device, Path::new("shaders/simple.vert"));
+        let fragment_shader_module = Pipeline::create_shader_module(&device.as_ref().device, Path::new("shaders/simple.frag"));
 
         // Compile shaders
-        let shader_module = Pipeline::create_shader_module(&device.as_ref().device, shader);
+        let entry_point = CString::new("main").unwrap();
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::builder()
                 .module(vertex_shader_module)
-                .name(unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0") })
+                .name(&entry_point)
                 .stage(vk::ShaderStageFlags::VERTEX)
                 .build(),
             vk::PipelineShaderStageCreateInfo::builder()
-                .module(shader_module)
-                .name(unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(b"main_fs\0") })
+                .module(fragment_shader_module)
+                .name(&entry_point)
                 .stage(vk::ShaderStageFlags::FRAGMENT)
                 .build(),
         ];
@@ -195,32 +177,27 @@ impl Pipeline {
 
         unsafe {
             device.device.destroy_shader_module(vertex_shader_module, None);
+            device.device.destroy_shader_module(fragment_shader_module, None);
         };
 
         Pipeline {
             device,
             graphics_pipeline,
             layout: pipeline_layout,
-            shader_module,
         }
     }
 
-    /// Helper constructor that creates a new shader module from a rust-gpu crate
-    fn create_shader_module(device: &ash::Device, shader_crate: &'static str) -> vk::ShaderModule {
-        // FIXME: This assumes we are running an example from 'target/debug/examples'
-        let mut shader_crate_path = std::env::current_exe().unwrap();
-        shader_crate_path.pop();
-        shader_crate_path.pop();
-        shader_crate_path.pop();
-        shader_crate_path.push("spirv-unknown-vulkan1.1");
-        shader_crate_path.push("release");
-        shader_crate_path.push("deps");
-        shader_crate_path.push(format!(
-            "{}.spv.dir\\module",
-            shader_crate.replace("-", "_")
-        ));
-        let shader_code =
-            ash::util::read_spv(&mut std::fs::File::open(shader_crate_path).unwrap()).unwrap();
+    /// Helper constructor that creates a new shader module from a shader
+    /// 
+    /// You do not need to add the .spv file extensions and instead use the path to the source file of your shader
+    /// For example "shaders/simple.vert"
+    fn create_shader_module(device: &ash::Device, shader_path: &Path) -> vk::ShaderModule {
+        let mut shader_path = shader_path.to_path_buf();
+        shader_path.set_extension(format!("{}.spv", shader_path.extension().unwrap().to_str().unwrap()));
+        let shader_code = ash::util::read_spv(
+            &mut std::fs::File::open(shader_path).expect("Failed to open file"),
+        )
+        .expect("Failed to read spv");
 
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&shader_code);
 
@@ -235,9 +212,6 @@ impl Pipeline {
 impl Drop for Pipeline {
     fn drop(&mut self) {
         unsafe {
-            self.device
-                .device
-                .destroy_shader_module(self.shader_module, None);
             self.device
                 .device
                 .destroy_pipeline(self.graphics_pipeline, None);

@@ -42,7 +42,7 @@ impl App {
         let device = Rc::new(Device::new(&window));
         let swapchain = Swapchain::new(device.clone());
 
-        let pipeline = Pipeline::new(device.clone(), "simple-shader", swapchain.render_pass);
+        let pipeline = Pipeline::new(device.clone(), swapchain.render_pass);
 
         let command_buffers = App::create_command_buffers(
             &device.device,
@@ -89,11 +89,7 @@ impl App {
             );
         }
 
-        self.pipeline = Pipeline::new(
-            self.device.clone(),
-            "simple-shader",
-            self.swapchain.render_pass,
-        );
+        self.pipeline = Pipeline::new(self.device.clone(), self.swapchain.render_pass);
     }
 
     /// Creates new Vulkan command buffers for every framebuffer
@@ -203,7 +199,7 @@ impl App {
                     self.pipeline.layout,
                     vk::ShaderStageFlags::VERTEX,
                     0,
-                    push.as_bytes()
+                    push.as_bytes(),
                 );
 
                 model.draw(self.command_buffers[index]);
