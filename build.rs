@@ -1,26 +1,36 @@
 fn main() {
-    println!("cargo:rerun-if-changed=shaders/simple-shader/src/lib.rs");
+    println!("cargo:rerun-if-changed=shaders/simple.vert");
+    println!("cargo:rerun-if-changed=shaders/simple.frag");
 
-    // Build all the shaders in 'shaders' before-hand so the application doesn't need to compile them at runtime
+    // Builds all the GLSL shaders to spirv
     let mut shaders_dir = std::env::current_dir().expect("Failed to get current dir");
     shaders_dir.push("shaders");
-    let entries = std::fs::read_dir(shaders_dir).expect("Failed to get entries in directory");
+    let entries =
+        std::fs::read_dir(shaders_dir.clone()).expect("Failed to get entries in shaders directory");
 
     for entry in entries {
         if let Ok(entry) = entry {
             let path = entry.path();
-            if path.is_dir() {
-                println!("Compiling {:?} shader crate", path);
-                spirv_builder::SpirvBuilder::new(
-                    format!("shaders/{}", path.file_name().unwrap().to_str().unwrap()),
-                    "spirv-unknown-vulkan1.1",
-                )
-                .print_metadata(spirv_builder::MetadataPrintout::None)
-                .build()
-                .expect(&format!(
-                    "Failed to build shader {:?}",
-                    path.file_name().unwrap()
-                ));
+            if path.is_file() {
+                // We only want to compile .vert and .frag (not interested in .vert.spv)
+                if let Some(shader_extension) = path.extension() {
+                    if shader_extension == "spv" {
+                        continue;
+                    }
+
+                    // println!("Compiling {:?}", path);
+                    let mut output_path = path.clone();
+                    output_path.set_extension(format!("{}.spv", path.extension().unwrap().to_str().unwrap()));
+                    let status = std::process::Command::new("glslc")
+                        .args(&[
+                            path.to_str().unwrap(),
+                            "-o",
+                            output_path.to_str().unwrap(),
+                        ])
+                        .status()
+                        .expect("Failed to execute glslc");
+                    assert!(status.success(), "Failed to compile {:?}", path);
+                }
             }
         }
     }
