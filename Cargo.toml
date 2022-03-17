@@ -3,11 +3,6 @@ name = "magma"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = ["use-compiled-tools"]
-use-installed-tools = ["spirv-builder/use-installed-tools"]
-use-compiled-tools = ["spirv-builder/use-compiled-tools"]
-
 [dependencies]
 ash = "0.36.0"
 log = "0.4.14"
@@ -17,9 +12,6 @@ image = "0.24.1"
 memoffset = "0.6.5"
 tobj = "3.2.1"
 thiserror = "1.0.30"
-
-[build-dependencies]
-spirv-builder = { git = "https://github.com/EmbarkStudios/rust-gpu", default-features=false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3.9", features = ["windef", "libloaderapi"] }
