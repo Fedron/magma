@@ -17,22 +17,22 @@ pub struct App {
     window: Rc<winit::window::Window>,
     /// Handle to logical device
     pub device: Rc<Device>,
+    /// Handle to the Vulkan renderer
     renderer: Renderer,
     /// List of all entities in the 'world'
     entities: Vec<Entity>,
+    /// Current size of the window in pixels
     window_size: winit::dpi::PhysicalSize<u32>,
 }
 
 impl App {
     /// Creates a new App
     ///
-    /// Loads the Vulkan library and then creates a Vulkan instance
+    /// Loads the Vulkan library and then creates a new Renderer
     pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> App {
         let window = Rc::new(App::init_window(event_loop));
         let device = Rc::new(Device::new(&window));
-
         let renderer = Renderer::new(window.clone(), device.clone());
-
         let window_size = window.inner_size();
 
         App {
