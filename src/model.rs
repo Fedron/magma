@@ -3,7 +3,7 @@ use std::{fmt::Debug, rc::Rc};
 use ash::vk;
 use memoffset::offset_of;
 
-use crate::vulkan::device::{BufferUsage, Device};
+use crate::renderer::device::{BufferUsage, Device};
 
 /// Represents a singe vertex with a 2D position and colour
 #[repr(C)]
