@@ -3,8 +3,15 @@ use std::rc::Rc;
 
 use crate::entity::Entity;
 
-use super::{device::Device, pipeline::{Pipeline, PushConstants, Align16}};
+use super::{
+    device::Device,
+    pipeline::{Align16, Pipeline, PushConstants},
+};
 
+/// Renderers entities using the [Vulkan renderer][crate::renderer::Renderer]
+///
+/// The simple render system uses a graphics pipeline that uses the 'simple' shaders that can be found
+/// in the 'shaders' folder
 pub struct SimpleRenderSystem {
     /// Handle to logical device
     pub device: Rc<Device>,
@@ -13,20 +20,17 @@ pub struct SimpleRenderSystem {
 }
 
 impl SimpleRenderSystem {
+    /// Creates a new simple render system
+    ///
+    /// The new render system will also create a new graphics pipeline for it to use that will be using the simple shaders
     pub fn new(device: Rc<Device>, render_pass: vk::RenderPass) -> SimpleRenderSystem {
         let pipeline = Pipeline::new(device.clone(), render_pass);
 
-        SimpleRenderSystem {
-            device,
-            pipeline,
-        }
+        SimpleRenderSystem { device, pipeline }
     }
 
-    pub fn render_entities(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        entities: &mut Vec<Entity>,
-    ) {
+    /// Renders the given entities using the given command buffer
+    pub fn render_entities(&self, command_buffer: vk::CommandBuffer, entities: &Vec<Entity>) {
         unsafe {
             self.device.device.cmd_bind_pipeline(
                 command_buffer,
@@ -34,9 +38,8 @@ impl SimpleRenderSystem {
                 self.pipeline.graphics_pipeline,
             );
 
-            for entity in entities.iter_mut() {
+            for entity in entities.iter() {
                 entity.model().bind(command_buffer);
-                entity.transform.rotation += 0.1;
 
                 let push = PushConstants {
                     transform: Align16(entity.transform_matrix()),

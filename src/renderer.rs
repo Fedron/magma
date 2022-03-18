@@ -10,6 +10,7 @@ pub mod simple_render_system;
 use self::{device::Device, swapchain::Swapchain};
 
 pub struct Renderer {
+    /// Handle to the window that is being drawn to
     window: Rc<Window>,
     /// Handle to logical device
     device: Rc<Device>,
@@ -17,7 +18,9 @@ pub struct Renderer {
     swapchain: Swapchain,
     /// List of all command buffers being used
     command_buffers: Vec<vk::CommandBuffer>,
+    /// Index of the current framebuffer and command buffer being used
     current_image_index: usize,
+    /// Indicates whether a frame has been started using 'begin_frame'
     is_frame_started: bool,
 }
 
@@ -101,10 +104,12 @@ impl Renderer {
         self.command_buffers.clear();
     }
 
+    /// Returns the render pass being used by the swapchain
     pub fn get_swapchain_render_pass(&self) -> vk::RenderPass {
         self.swapchain.render_pass
     }
 
+    /// Begins the swapchain's render pass
     pub fn begin_swapchain_render_pass(&self, command_buffer: vk::CommandBuffer) {
         if !self.is_frame_started {
             log::error!("Cannot begin a swapchain render pass if no frame is in progress");
@@ -161,6 +166,7 @@ impl Renderer {
         }
     }
 
+    /// Ends the swapchain's render pass
     pub fn end_swapchain_render_pass(&self, command_buffer: vk::CommandBuffer) {
         if !self.is_frame_started {
             log::error!("Cannot end a swapchain render pass if no frame is in progress");
@@ -177,6 +183,10 @@ impl Renderer {
         };
     }
 
+    /// Begins frame that can be drawn to, returns the command buffer to write commands to
+    /// 
+    /// Acquires the next image to draw to from the swapchain and if the swapchain is suboptimal or out of date
+    /// then the swapchain will recreated and the frame won't begin.
     pub fn begin_frame(&mut self) -> Option<vk::CommandBuffer> {
         if self.is_frame_started {
             log::error!("Cannot begin a new frame, while another is already in progress");
@@ -212,6 +222,10 @@ impl Renderer {
         Some(command_buffer)
     }
 
+    /// Ends the frame submitting the command buffer and causing a draw to the window
+    /// 
+    /// If at any point the swapchain comes back as being suboptimal or out of date then it will be recreated
+    /// and the frame ended
     pub fn end_frame(&mut self) {
         if !self.is_frame_started {
             log::error!("Cannot end an frame when no frame has been started");
@@ -239,6 +253,7 @@ impl Renderer {
         self.is_frame_started = false;
     }
 
+    /// Returns the command buffer that is currently being used
     pub fn get_current_command_buffer(&self) -> vk::CommandBuffer {
         if !self.is_frame_started {
             log::error!("Cannot get a command buffer when a frame is not in progress");
