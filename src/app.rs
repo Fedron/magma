@@ -1,4 +1,3 @@
-use ash::vk;
 use std::rc::Rc;
 use winit::{
     event::{Event, WindowEvent},
@@ -8,11 +7,7 @@ use winit::{
 
 use crate::{
     entity::Entity,
-    renderer::{
-        device::Device,
-        pipeline::{Align16, Pipeline, PushConstants},
-        Renderer,
-    },
+    renderer::{device::Device, simple_render_system::SimpleRenderSystem, Renderer},
     utils,
 };
 
@@ -22,8 +17,6 @@ pub struct App {
     window: Rc<winit::window::Window>,
     /// Handle to logical device
     pub device: Rc<Device>,
-    /// Handle to the current graphics pipeline
-    pipeline: Pipeline,
     renderer: Renderer,
     /// List of all entities in the 'world'
     entities: Vec<Entity>,
@@ -39,48 +32,16 @@ impl App {
         let device = Rc::new(Device::new(&window));
 
         let renderer = Renderer::new(window.clone(), device.clone());
-        let pipeline = Pipeline::new(device.clone(), renderer.get_swapchain_render_pass());
 
         let window_size = window.inner_size();
 
         App {
             window,
             device,
-            pipeline,
             renderer,
             entities: Vec::new(),
             window_size,
         }
-    }
-
-    fn render_entities(&mut self, command_buffer: vk::CommandBuffer) {
-        unsafe {
-            self.device.device.cmd_bind_pipeline(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.graphics_pipeline,
-            );
-
-            for entity in self.entities.iter_mut() {
-                entity.model().bind(command_buffer);
-                entity.transform.rotation += 0.1;
-
-                let push = PushConstants {
-                    transform: Align16(entity.transform_matrix()),
-                    translation: Align16(entity.transform.position),
-                };
-
-                self.device.device.cmd_push_constants(
-                    command_buffer,
-                    self.pipeline.layout,
-                    vk::ShaderStageFlags::VERTEX,
-                    0,
-                    push.as_bytes(),
-                );
-
-                entity.model().draw(command_buffer);
-            }
-        };
     }
 
     /// Initialises a winit window, returning the initialised window
@@ -102,6 +63,11 @@ impl App {
 
     /// Runs the winit event loop, which wraps the App main loop
     pub fn main_loop(mut self, event_loop: EventLoop<()>) {
+        let simple_render_system = SimpleRenderSystem::new(
+            self.device.clone(),
+            self.renderer.get_swapchain_render_pass(),
+        );
+
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
@@ -115,7 +81,7 @@ impl App {
             Event::RedrawRequested(_) => {
                 if let Some(command_buffer) = self.renderer.begin_frame() {
                     self.renderer.begin_swapchain_render_pass(command_buffer);
-                    self.render_entities(command_buffer);
+                    simple_render_system.render_entities(command_buffer, &mut self.entities);
                     self.renderer.end_swapchain_render_pass(command_buffer);
                     self.renderer.end_frame();
                 }
