@@ -110,10 +110,12 @@ impl Pipeline {
             .build();
 
         let depth_state_info = vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(false)
-            .depth_write_enable(false)
+            .depth_test_enable(true)
+            .depth_write_enable(true)
             .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
             .depth_bounds_test_enable(false)
+            .min_depth_bounds(0.0)
+            .max_depth_bounds(1.0)
             .stencil_test_enable(false)
             .front(stencil_state)
             .back(stencil_state);

@@ -31,12 +31,19 @@ pub struct Swapchain {
     /// Size, in pixels, of the swapchain
     pub extent: vk::Extent2D,
 
+    /// Depth stencil images drawn to at the same time as colour images
+    depth_images: Vec<vk::Image>,
+    /// GPU memory associated with the depth image at the same index
+    depth_image_memories: Vec<vk::DeviceMemory>,
+    /// Image views for each depth image
+    depth_image_views: Vec<vk::ImageView>,
+
     /// Handle to Vulkan render pass being used by the graphics pipeline
     pub render_pass: vk::RenderPass,
     /// All framebuffers being used
     pub framebuffers: Vec<vk::Framebuffer>,
 
-    /// Images that can be be drawn to and presented
+    /// Colour images that can be be drawn to and presented
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImage.html
     _images: Vec<vk::Image>,
@@ -87,11 +94,18 @@ impl Swapchain {
             &vk_swapchain.images,
         );
 
-        let render_pass = Swapchain::create_render_pass(&device.device, vk_swapchain.format);
+        let render_pass = Swapchain::create_render_pass(device.as_ref(), vk_swapchain.format);
+        let (depth_images, depth_image_memories, depth_image_views) =
+            Swapchain::create_depth_resources(
+                device.as_ref(),
+                image_views.len(),
+                vk_swapchain.extent,
+            );
         let framebuffers = Swapchain::create_framebuffers(
             &device.device,
             render_pass,
             &image_views,
+            &depth_image_views,
             &vk_swapchain.extent,
         );
 
@@ -112,6 +126,10 @@ impl Swapchain {
 
             _images: vk_swapchain.images,
             image_views,
+
+            depth_images,
+            depth_image_memories,
+            depth_image_views,
 
             render_pass,
             framebuffers,
@@ -153,11 +171,18 @@ impl Swapchain {
             &vk_swapchain.images,
         );
 
-        let render_pass = Swapchain::create_render_pass(&device.device, vk_swapchain.format);
+        let render_pass = Swapchain::create_render_pass(device.as_ref(), vk_swapchain.format);
+        let (depth_images, depth_image_memories, depth_image_views) =
+            Swapchain::create_depth_resources(
+                device.as_ref(),
+                image_views.len(),
+                vk_swapchain.extent,
+            );
         let framebuffers = Swapchain::create_framebuffers(
             &device.device,
             render_pass,
             &image_views,
+            &depth_image_views,
             &vk_swapchain.extent,
         );
 
@@ -178,6 +203,10 @@ impl Swapchain {
 
             _images: vk_swapchain.images,
             image_views,
+
+            depth_images,
+            depth_image_memories,
+            depth_image_views,
 
             render_pass,
             framebuffers,
@@ -350,8 +379,67 @@ impl Swapchain {
         image_views
     }
 
+    /// Helper constructor to create depth stencil resources for every image in the swapchain.
+    /// Takes in the number of images to create, and the extent the images should have
+    ///
+    /// Returns the depth images, image memory, and the image view as a tuple
+    fn create_depth_resources(
+        device: &Device,
+        count: usize,
+        extent: vk::Extent2D,
+    ) -> (Vec<vk::Image>, Vec<vk::DeviceMemory>, Vec<vk::ImageView>) {
+        let mut depth_images: Vec<vk::Image> = Vec::new();
+        let mut depth_image_memories: Vec<vk::DeviceMemory> = Vec::new();
+        let mut depth_image_views: Vec<vk::ImageView> = Vec::new();
+
+        let depth_format = Swapchain::find_depth_format(device);
+
+        for _ in 0..count {
+            let image_info = vk::ImageCreateInfo::builder()
+                .image_type(vk::ImageType::TYPE_2D)
+                .extent(vk::Extent3D {
+                    width: extent.width,
+                    height: extent.height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .array_layers(1)
+                .format(depth_format)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+            let (depth_image, depth_image_memory) =
+                device.create_image(&image_info, vk::MemoryPropertyFlags::DEVICE_LOCAL);
+
+            let image_view_info = vk::ImageViewCreateInfo::builder()
+                .image(depth_image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(depth_format)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            depth_image_views.push(unsafe {
+                device
+                    .device
+                    .create_image_view(&image_view_info, None)
+                    .expect("Failed to create depth image view")
+            });
+            depth_images.push(depth_image);
+            depth_image_memories.push(depth_image_memory);
+        }
+
+        (depth_images, depth_image_memories, depth_image_views)
+    }
+
     /// Helper constructor that creates a new render pass
-    fn create_render_pass(device: &ash::Device, surface_format: vk::Format) -> vk::RenderPass {
+    fn create_render_pass(device: &Device, surface_format: vk::Format) -> vk::RenderPass {
         let color_attachment = vk::AttachmentDescription::builder()
             .format(surface_format)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -367,22 +455,42 @@ impl Swapchain {
             layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         }];
 
+        let depth_attachment = vk::AttachmentDescription::builder()
+            .format(Swapchain::find_depth_format(device))
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+            .build();
+
+        let depth_attachment_ref = vk::AttachmentReference {
+            attachment: 1,
+            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+
         let subpasses = [vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_ref)
+            .depth_stencil_attachment(&depth_attachment_ref)
             .build()];
 
         let subpass_dependencies = [vk::SubpassDependency {
             src_subpass: vk::SUBPASS_EXTERNAL,
             dst_subpass: 0,
-            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
             src_access_mask: vk::AccessFlags::empty(),
-            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
             dependency_flags: vk::DependencyFlags::empty(),
         }];
 
-        let render_pass_attachments = [color_attachment];
+        let render_pass_attachments = [color_attachment, depth_attachment];
         let render_pass_info = vk::RenderPassCreateInfo::builder()
             .attachments(&render_pass_attachments)
             .subpasses(&subpasses)
@@ -390,9 +498,23 @@ impl Swapchain {
 
         unsafe {
             device
+                .device
                 .create_render_pass(&render_pass_info, None)
                 .expect("Failed to create render pass")
         }
+    }
+
+    /// Finds a supported depth format
+    fn find_depth_format(device: &Device) -> vk::Format {
+        device.find_supported_format(
+            &[
+                vk::Format::D32_SFLOAT,
+                vk::Format::D32_SFLOAT_S8_UINT,
+                vk::Format::D24_UNORM_S8_UINT,
+            ],
+            vk::ImageTiling::OPTIMAL,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        )
     }
 
     /// Helper constructor that creates a new framebuffer for every image in the swapchain
@@ -400,11 +522,12 @@ impl Swapchain {
         device: &ash::Device,
         render_pass: vk::RenderPass,
         image_views: &Vec<vk::ImageView>,
+        depth_image_views: &Vec<vk::ImageView>,
         swapchain_extent: &vk::Extent2D,
     ) -> Vec<vk::Framebuffer> {
         let mut framebuffers: Vec<vk::Framebuffer> = Vec::new();
-        for &image_view in image_views.iter() {
-            let attachments = [image_view];
+        for (&image_view, &depth_image_view) in image_views.iter().zip(depth_image_views) {
+            let attachments = [image_view, depth_image_view];
 
             let framebuffer_info = vk::FramebufferCreateInfo::builder()
                 .render_pass(render_pass)
@@ -481,13 +604,12 @@ impl Swapchain {
                 .wait_for_fences(&wait_fences, true, std::u64::MAX)
                 .expect("Failed to wait for fences");
 
-            self.loader
-                .acquire_next_image(
-                    self.swapchain,
-                    std::u64::MAX,
-                    self.image_available_semaphores[self.current_frame],
-                    vk::Fence::null(),
-                )
+            self.loader.acquire_next_image(
+                self.swapchain,
+                std::u64::MAX,
+                self.image_available_semaphores[self.current_frame],
+                vk::Fence::null(),
+            )
         }
     }
 
@@ -567,6 +689,18 @@ impl Drop for Swapchain {
             }
 
             self.loader.destroy_swapchain(self.swapchain, None);
+
+            for i in 0..self.depth_images.len() {
+                self.device
+                    .device
+                    .destroy_image_view(*self.depth_image_views.get(i).unwrap(), None);
+                self.device
+                    .device
+                    .destroy_image(*self.depth_images.get(i).unwrap(), None);
+                self.device
+                    .device
+                    .free_memory(*self.depth_image_memories.get(i).unwrap(), None);
+            }
 
             for &framebuffer in self.framebuffers.iter() {
                 self.device.device.destroy_framebuffer(framebuffer, None);
