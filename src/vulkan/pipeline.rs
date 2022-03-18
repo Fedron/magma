@@ -1,5 +1,5 @@
 use ash::vk;
-use std::{rc::Rc, path::Path, ffi::CString};
+use std::{ffi::CString, path::Path, rc::Rc};
 
 use crate::model::Vertex;
 
@@ -10,7 +10,8 @@ use super::device::Device;
 pub struct Align16<T>(pub T);
 
 pub struct PushConstants {
-    pub offset: Align16<cgmath::Vector2<f32>>,
+    pub transform: Align16<cgmath::Matrix2<f32>>,
+    pub translation: Align16<cgmath::Vector2<f32>>,
 }
 
 impl PushConstants {
@@ -38,8 +39,14 @@ pub struct Pipeline {
 impl Pipeline {
     /// Creates a new graphics pipeline for a device
     pub fn new(device: Rc<Device>, render_pass: vk::RenderPass) -> Pipeline {
-        let vertex_shader_module = Pipeline::create_shader_module(&device.as_ref().device, Path::new("shaders/simple.vert"));
-        let fragment_shader_module = Pipeline::create_shader_module(&device.as_ref().device, Path::new("shaders/simple.frag"));
+        let vertex_shader_module = Pipeline::create_shader_module(
+            &device.as_ref().device,
+            Path::new("shaders/simple.vert"),
+        );
+        let fragment_shader_module = Pipeline::create_shader_module(
+            &device.as_ref().device,
+            Path::new("shaders/simple.frag"),
+        );
 
         // Compile shaders
         let entry_point = CString::new("main").unwrap();
@@ -176,8 +183,12 @@ impl Pipeline {
         };
 
         unsafe {
-            device.device.destroy_shader_module(vertex_shader_module, None);
-            device.device.destroy_shader_module(fragment_shader_module, None);
+            device
+                .device
+                .destroy_shader_module(vertex_shader_module, None);
+            device
+                .device
+                .destroy_shader_module(fragment_shader_module, None);
         };
 
         Pipeline {
@@ -188,12 +199,15 @@ impl Pipeline {
     }
 
     /// Helper constructor that creates a new shader module from a shader
-    /// 
+    ///
     /// You do not need to add the .spv file extensions and instead use the path to the source file of your shader
     /// For example "shaders/simple.vert"
     fn create_shader_module(device: &ash::Device, shader_path: &Path) -> vk::ShaderModule {
         let mut shader_path = shader_path.to_path_buf();
-        shader_path.set_extension(format!("{}.spv", shader_path.extension().unwrap().to_str().unwrap()));
+        shader_path.set_extension(format!(
+            "{}.spv",
+            shader_path.extension().unwrap().to_str().unwrap()
+        ));
         let shader_code = ash::util::read_spv(
             &mut std::fs::File::open(shader_path).expect("Failed to open file"),
         )
