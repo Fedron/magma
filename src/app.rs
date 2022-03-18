@@ -7,7 +7,7 @@ use winit::{
 };
 
 use crate::{
-    model::Model,
+    entity::Entity,
     utils,
     vulkan::{
         device::Device,
@@ -28,8 +28,8 @@ pub struct App {
     pipeline: Pipeline,
     /// List of all command buffers being used
     command_buffers: Vec<vk::CommandBuffer>,
-    /// List of all models that are being drawn
-    models: Vec<Model>,
+    /// List of all entities in the 'world'
+    entities: Vec<Entity>,
     window_size: winit::dpi::PhysicalSize<u32>,
 }
 
@@ -58,7 +58,7 @@ impl App {
             swapchain,
             pipeline,
             command_buffers,
-            models: Vec::new(),
+            entities: Vec::new(),
             window_size,
         }
     }
@@ -187,11 +187,13 @@ impl App {
                 self.pipeline.graphics_pipeline,
             );
 
-            for model in self.models.iter() {
-                model.bind(self.command_buffers[index]);
+            for entity in self.entities.iter_mut() {
+                entity.model().bind(self.command_buffers[index]);
+                entity.transform.rotation += 0.1;
 
                 let push = PushConstants {
-                    offset: Align16(cgmath::Vector2::new(0.5, 0.5)),
+                    transform: Align16(entity.transform_matrix()),
+                    translation: Align16(entity.transform.position),
                 };
 
                 self.device.device.cmd_push_constants(
@@ -202,7 +204,7 @@ impl App {
                     push.as_bytes(),
                 );
 
-                model.draw(self.command_buffers[index]);
+                entity.model().draw(self.command_buffers[index]);
             }
 
             self.device
@@ -227,9 +229,9 @@ impl App {
             .expect("")
     }
 
-    /// Adds a new model that will be rendered
-    pub fn add_model(&mut self, model: Model) {
-        self.models.push(model);
+    /// Adds a new entity that will be rendered
+    pub fn add_entity(&mut self, entity: Entity) {
+        self.entities.push(entity);
     }
 
     /// Runs the winit event loop, which wraps the App main loop
