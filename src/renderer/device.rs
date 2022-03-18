@@ -506,7 +506,7 @@ impl Device {
 
 impl Device {
     /// Uploads data to a buffer on the GPU through the use of a staging buffer on the CPU
-    /// 
+    ///
     /// Returns the buffer and device memory on the GPU
     pub fn upload_buffer_with_staging<T>(
         &self,
@@ -578,13 +578,9 @@ impl Device {
         };
 
         let memory_requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
-        let memory_type = Device::find_memory_type(
+        let memory_type = self.find_memory_type(
             memory_requirements.memory_type_bits,
             required_memory_properties,
-            &unsafe {
-                self.instance
-                    .get_physical_device_memory_properties(self.physical_device)
-            },
         );
 
         let allocate_info = vk::MemoryAllocateInfo::builder()
@@ -668,10 +664,15 @@ impl Device {
     /// Finds a suitable memory type for device memory give a set of required properties and the ones supported by the
     /// physical device
     fn find_memory_type(
+        &self,
         type_filter: u32,
         required_properties: vk::MemoryPropertyFlags,
-        memory_properties: &vk::PhysicalDeviceMemoryProperties,
     ) -> u32 {
+        let memory_properties = unsafe {
+            self.instance
+                .get_physical_device_memory_properties(self.physical_device)
+        };
+
         for (i, memory_type) in memory_properties.memory_types.iter().enumerate() {
             if (type_filter & (1 << i)) > 0
                 && memory_type.property_flags.contains(required_properties)
@@ -681,6 +682,71 @@ impl Device {
         }
 
         panic!("Failed to find a suitable memory type")
+    }
+
+    /// Finds whether the candidate formats are supported by the physical device using the specified tiling mode
+    ///
+    /// Returns the first candidate that is supported
+    pub fn find_supported_format(
+        &self,
+        candidates: &[vk::Format],
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> vk::Format {
+        for &format in candidates {
+            let properties = unsafe {
+                self.instance
+                    .get_physical_device_format_properties(self.physical_device, format)
+            };
+
+            if tiling == vk::ImageTiling::LINEAR
+                && properties.linear_tiling_features.contains(features)
+            {
+                return format;
+            } else if tiling == vk::ImageTiling::OPTIMAL
+                && properties.optimal_tiling_features.contains(features)
+            {
+                return format;
+            }
+        }
+
+        panic!("Failed to find a supported format");
+    }
+
+    /// Helper function for creating a Vulkan image and device memory for the image
+    ///
+    /// Returns the created image and device memory
+    pub fn create_image(
+        &self,
+        create_info: &vk::ImageCreateInfo,
+        memory_properties: vk::MemoryPropertyFlags,
+    ) -> (vk::Image, vk::DeviceMemory) {
+        let image = unsafe {
+            self.device
+                .create_image(create_info, None)
+                .expect("Failed to create image")
+        };
+
+        let memory_requirements = unsafe { self.device.get_image_memory_requirements(image) };
+        let allocate_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(memory_requirements.size)
+            .memory_type_index(
+                self.find_memory_type(memory_requirements.memory_type_bits, memory_properties),
+            );
+
+        let device_memory = unsafe {
+            self.device
+                .allocate_memory(&allocate_info, None)
+                .expect("Failed to allocate device memory")
+        };
+
+        unsafe {
+            self.device
+                .bind_image_memory(image, device_memory, 0)
+                .expect("Failed to bind device memory to image")
+        };
+
+        (image, device_memory)
     }
 }
 

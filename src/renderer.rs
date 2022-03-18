@@ -4,8 +4,8 @@ use winit::window::Window;
 
 pub mod device;
 pub mod pipeline;
-pub mod swapchain;
 pub mod simple_render_system;
+pub mod swapchain;
 
 use self::{device::Device, swapchain::Swapchain};
 
@@ -121,11 +121,19 @@ impl Renderer {
             panic!("Failed to begin swapchain render pass, see above");
         }
 
-        let clear_values = [vk::ClearValue {
-            color: vk::ClearColorValue {
-                float32: [0.1, 0.1, 0.1, 1.0],
+        let clear_values = [
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.1, 0.1, 0.1, 1.0],
+                },
             },
-        }];
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            },
+        ];
 
         let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
             .render_pass(self.swapchain.render_pass)
@@ -184,7 +192,7 @@ impl Renderer {
     }
 
     /// Begins frame that can be drawn to, returns the command buffer to write commands to
-    /// 
+    ///
     /// Acquires the next image to draw to from the swapchain and if the swapchain is suboptimal or out of date
     /// then the swapchain will recreated and the frame won't begin.
     pub fn begin_frame(&mut self) -> Option<vk::CommandBuffer> {
@@ -223,7 +231,7 @@ impl Renderer {
     }
 
     /// Ends the frame submitting the command buffer and causing a draw to the window
-    /// 
+    ///
     /// If at any point the swapchain comes back as being suboptimal or out of date then it will be recreated
     /// and the frame ended
     pub fn end_frame(&mut self) {
