@@ -9,7 +9,7 @@ use winit::{
 use crate::{
     entity::Entity,
     utils,
-    vulkan::{
+    renderer::{
         device::Device,
         pipeline::{Align16, Pipeline, PushConstants},
         swapchain::Swapchain,

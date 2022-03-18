@@ -2,7 +2,6 @@ use ash::vk;
 use std::{ffi::CString, path::Path, rc::Rc};
 
 use crate::model::Vertex;
-
 use super::device::Device;
 
 #[repr(align(16))]
