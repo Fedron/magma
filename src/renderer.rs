@@ -5,6 +5,7 @@ use winit::window::Window;
 pub mod device;
 pub mod pipeline;
 pub mod swapchain;
+pub mod simple_render_system;
 
 use self::{device::Device, swapchain::Swapchain};
 
