@@ -7,32 +7,53 @@ use crate::model::Model;
 
 static ENTITY_COUNT: AtomicU32 = AtomicU32::new(0);
 
-pub struct Transform2D {
-    pub position: cgmath::Vector2<f32>,
-    pub rotation: f32,
-    pub scale: cgmath::Vector2<f32>,
+pub struct Transform {
+    pub position: cgmath::Vector3<f32>,
+    pub rotation: cgmath::Vector3<f32>,
+    pub scale: cgmath::Vector3<f32>,
 }
 
-impl Transform2D {
-    pub fn as_matrix(&self) -> cgmath::Matrix2<f32> {
-        let sin = self.rotation.to_radians().sin();
-        let cos = self.rotation.to_radians().cos();
+impl Transform {
+    pub fn as_matrix(&self) -> cgmath::Matrix4<f32> {
+        let c3 = self.rotation.z.to_radians().cos();
+        let s3 = self.rotation.z.to_radians().sin();
+        let c2 = self.rotation.x.to_radians().cos();
+        let s2 = self.rotation.x.to_radians().sin();
+        let c1 = self.rotation.y.to_radians().cos();
+        let s1 = self.rotation.y.to_radians().sin();
 
-        let rotation_matrix = cgmath::Matrix2::new(cos, sin, -sin, cos);
-        let scale_matrix = cgmath::Matrix2::new(self.scale.x, 0.0, 0.0, self.scale.y);
-
-        rotation_matrix * scale_matrix
+        cgmath::Matrix4::from_cols(
+            cgmath::Vector4::new(
+                self.scale.x * (c1 * c3 + s1 * s2 * s3),
+                self.scale.x * (c2 * s3),
+                self.scale.x * (c1 * s2 * s3 - c3 * s1),
+                0.0,
+            ),
+            cgmath::Vector4::new(
+                self.scale.y * (c3 * s1 * s2 - c1 * s3),
+                self.scale.y * (c2 * c3),
+                self.scale.y * (c1 * c3 * s2 + s1 * s3),
+                0.0,
+            ),
+            cgmath::Vector4::new(
+                self.scale.z * (c2 * s1),
+                self.scale.z * (-s2),
+                self.scale.z * (c1 * c2),
+                0.0,
+            ),
+            cgmath::Vector4::new(self.position.x, self.position.y, self.position.z, 1.0),
+        )
     }
 }
 
 pub struct Entity {
     _id: u32,
     model: Rc<Model>,
-    pub transform: Transform2D,
+    pub transform: Transform,
 }
 
 impl Entity {
-    pub fn new(model: Rc<Model>, transform: Transform2D) -> Entity {
+    pub fn new(model: Rc<Model>, transform: Transform) -> Entity {
         Entity {
             _id: ENTITY_COUNT.fetch_add(1, Ordering::Relaxed),
             model,
@@ -44,7 +65,7 @@ impl Entity {
         self.model.as_ref()
     }
 
-    pub fn transform_matrix(&self) -> cgmath::Matrix2<f32> {
+    pub fn transform_matrix(&self) -> cgmath::Matrix4<f32> {
         self.transform.as_matrix()
     }
 }
