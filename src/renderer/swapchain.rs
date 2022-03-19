@@ -679,6 +679,11 @@ impl Swapchain {
         self.current_frame = (self.current_frame + 1) % utils::constants::MAX_FRAMES_IN_FLIGHT;
         result
     }
+
+    /// Returns the aspect ratio of the swapchain extent
+    pub fn extent_aspect_ratio(&self) -> f32 {
+        self.extent.width as f32 / self.extent.height as f32
+    }
 }
 
 impl Drop for Swapchain {

@@ -72,6 +72,11 @@ impl Renderer {
         }
     }
 
+    /// Gets the aspect ratio of the swapchain
+    pub fn aspect_ratio(&self) -> f32 {
+        self.swapchain.extent_aspect_ratio()
+    }
+
     /// Creates new Vulkan command buffers for every framebuffer
     ///
     /// Nothing is recorded into the command buffers

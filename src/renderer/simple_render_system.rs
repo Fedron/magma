@@ -44,7 +44,7 @@ impl SimpleRenderSystem {
                 entity.model().bind(command_buffer);
 
                 let push = PushConstants {
-                    transform: Align16(entity.transform_matrix() * camera.projection_matrix()),
+                    transform: Align16(camera.projection_matrix() * entity.transform_matrix()),
                 };
 
                 self.device.device.cmd_push_constants(

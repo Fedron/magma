@@ -73,7 +73,7 @@ fn main() -> anyhow::Result<()> {
     app.add_entity(Entity::new(
         quad.clone(),
         Transform {
-            position: cgmath::Vector3::new(0.0, 0.0, 0.5),
+            position: cgmath::Vector3::new(0.0, 0.0, 2.5),
             rotation: cgmath::Vector3::new(0.0, 0.0, 0.0),
             scale: cgmath::Vector3::new(0.5, 0.5, 0.5),
         },
