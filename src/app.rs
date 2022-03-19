@@ -68,7 +68,6 @@ impl App {
             self.device.clone(),
             self.renderer.get_swapchain_render_pass(),
         );
-        let camera = Camera::from_orthographic(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
 
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
@@ -81,6 +80,10 @@ impl App {
             },
             Event::MainEventsCleared => self.window.request_redraw(),
             Event::RedrawRequested(_) => {
+                let aspect = self.renderer.aspect_ratio();
+                //let camera = Camera::from_orthographic(-aspect, aspect, -1.0, 1.0, -1.0, 1.0);
+                let camera = Camera::from_perspective(cgmath::Deg(50.0).into(), aspect, 0.1, 10.0);
+
                 if let Some(command_buffer) = self.renderer.begin_frame() {
                     self.renderer.begin_swapchain_render_pass(command_buffer);
                     simple_render_system.render_entities(
