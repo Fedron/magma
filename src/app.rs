@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use winit::{
-    event::{Event, WindowEvent},
+    event::{ElementState, Event, WindowEvent, VirtualKeyCode, ScanCode},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
@@ -24,6 +24,8 @@ pub struct App {
     entities: Vec<Entity>,
     /// Current size of the window in pixels
     window_size: winit::dpi::PhysicalSize<u32>,
+    /// Currently pressed keys
+    pressed_keys: Vec<winit::event::ScanCode>,
 }
 
 impl App {
@@ -42,6 +44,7 @@ impl App {
             renderer,
             entities: Vec::new(),
             window_size,
+            pressed_keys: Vec::new(),
         }
     }
 
@@ -68,6 +71,14 @@ impl App {
             self.device.clone(),
             self.renderer.get_swapchain_render_pass(),
         );
+        let camera = Camera::from_perspective(
+            cgmath::Deg(50.0).into(),
+            self.renderer.aspect_ratio(),
+            0.1,
+            10.0,
+        );
+
+        let mut last_time = std::time::Instant::now();
 
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
@@ -76,20 +87,35 @@ impl App {
                     self.window_size = size;
                     self.renderer.recreate_swapchain();
                 }
+                WindowEvent::KeyboardInput { input, .. } => {
+                    if input.state == ElementState::Released {
+                        if let Some(index) = self
+                            .pressed_keys
+                            .iter()
+                            .position(|&key| key == input.scancode)
+                        {
+                            self.pressed_keys.remove(index);
+                        }
+                    } else if input.state == ElementState::Pressed
+                        && !self
+                            .pressed_keys
+                            .contains(&input.scancode)
+                    {
+                        self.pressed_keys.push(input.scancode)
+                    }
+                }
                 _ => {}
             },
-            Event::MainEventsCleared => self.window.request_redraw(),
-            Event::RedrawRequested(_) => {
-                let aspect = self.renderer.aspect_ratio();
-                //let camera = Camera::from_orthographic(-aspect, aspect, -1.0, 1.0, -1.0, 1.0);
-                let mut camera =
-                    Camera::from_perspective(cgmath::Deg(50.0).into(), aspect, 0.1, 10.0);
-                camera.set_view_direction(
-                    cgmath::Vector3::new(0.0, 0.0, 0.0),
-                    cgmath::Vector3::new(0.5, 0.0, 1.0),
-                    cgmath::Vector3::new(0.0, -1.0, 0.0),
-                );
+            Event::MainEventsCleared => {
+                let current_time = std::time::Instant::now();
+                let frame_time = current_time - last_time;
+                last_time = current_time;
 
+                // Is the 'w' key pressed
+                println!("{}", self.is_key_pressed(17));
+                self.window.request_redraw();
+            }
+            Event::RedrawRequested(_) => {
                 if let Some(command_buffer) = self.renderer.begin_frame() {
                     self.renderer.begin_swapchain_render_pass(command_buffer);
                     simple_render_system.render_entities(
@@ -111,5 +137,9 @@ impl App {
             }
             _ => {}
         });
+    }
+
+    pub fn is_key_pressed(&self, key: ScanCode) -> bool {
+        self.pressed_keys.contains(&key)
     }
 }
