@@ -8,9 +8,9 @@ use crate::model::Model;
 static ENTITY_COUNT: AtomicU32 = AtomicU32::new(0);
 
 pub struct Transform {
-    pub position: cgmath::Vector3<f32>,
-    pub rotation: cgmath::Vector3<f32>,
-    pub scale: cgmath::Vector3<f32>,
+    pub position: cgmath::Point3<f32>,
+    pub rotation: cgmath::Point3<f32>,
+    pub scale: cgmath::Point3<f32>,
 }
 
 impl Transform {

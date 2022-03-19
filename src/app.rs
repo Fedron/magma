@@ -82,7 +82,13 @@ impl App {
             Event::RedrawRequested(_) => {
                 let aspect = self.renderer.aspect_ratio();
                 //let camera = Camera::from_orthographic(-aspect, aspect, -1.0, 1.0, -1.0, 1.0);
-                let camera = Camera::from_perspective(cgmath::Deg(50.0).into(), aspect, 0.1, 10.0);
+                let mut camera =
+                    Camera::from_perspective(cgmath::Deg(50.0).into(), aspect, 0.1, 10.0);
+                camera.set_view_direction(
+                    cgmath::Vector3::new(0.0, 0.0, 0.0),
+                    cgmath::Vector3::new(0.5, 0.0, 1.0),
+                    cgmath::Vector3::new(0.0, -1.0, 0.0),
+                );
 
                 if let Some(command_buffer) = self.renderer.begin_frame() {
                     self.renderer.begin_swapchain_render_pass(command_buffer);
