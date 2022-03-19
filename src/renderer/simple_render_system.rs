@@ -33,7 +33,7 @@ impl SimpleRenderSystem {
     pub fn render_entities(
         &self,
         command_buffer: vk::CommandBuffer,
-        entities: &mut Vec<Entity>,
+        entities: &Vec<Entity>,
         camera: &Camera,
     ) {
         unsafe {
@@ -44,9 +44,7 @@ impl SimpleRenderSystem {
             );
 
             let projection_view = camera.projection_matrix() * camera.view_matrix();
-            for entity in entities.iter_mut() {
-                entity.transform.rotation.y += 0.1;
-                entity.transform.rotation.x += 0.05;
+            for entity in entities.iter() {
                 entity.model().bind(command_buffer);
 
                 let push = PushConstants {
