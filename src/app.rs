@@ -6,6 +6,7 @@ use winit::{
 };
 
 use crate::{
+    camera::Camera,
     entity::Entity,
     renderer::{device::Device, simple_render_system::SimpleRenderSystem, Renderer},
     utils,
@@ -67,6 +68,7 @@ impl App {
             self.device.clone(),
             self.renderer.get_swapchain_render_pass(),
         );
+        let camera = Camera::from_orthographic(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
 
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
@@ -81,7 +83,11 @@ impl App {
             Event::RedrawRequested(_) => {
                 if let Some(command_buffer) = self.renderer.begin_frame() {
                     self.renderer.begin_swapchain_render_pass(command_buffer);
-                    simple_render_system.render_entities(command_buffer, &mut self.entities);
+                    simple_render_system.render_entities(
+                        command_buffer,
+                        &mut self.entities,
+                        &camera,
+                    );
                     self.renderer.end_swapchain_render_pass(command_buffer);
                     self.renderer.end_frame();
                 }

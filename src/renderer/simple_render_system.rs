@@ -1,7 +1,7 @@
 use ash::vk;
 use std::rc::Rc;
 
-use crate::entity::Entity;
+use crate::{entity::Entity, camera::Camera};
 
 use super::{
     device::Device,
@@ -30,7 +30,7 @@ impl SimpleRenderSystem {
     }
 
     /// Renders the given entities using the given command buffer
-    pub fn render_entities(&self, command_buffer: vk::CommandBuffer, entities: &mut Vec<Entity>) {
+    pub fn render_entities(&self, command_buffer: vk::CommandBuffer, entities: &mut Vec<Entity>, camera: &Camera) {
         unsafe {
             self.device.device.cmd_bind_pipeline(
                 command_buffer,
@@ -44,7 +44,7 @@ impl SimpleRenderSystem {
                 entity.model().bind(command_buffer);
 
                 let push = PushConstants {
-                    transform: Align16(entity.transform_matrix()),
+                    transform: Align16(entity.transform_matrix() * camera.projection_matrix()),
                 };
 
                 self.device.device.cmd_push_constants(
