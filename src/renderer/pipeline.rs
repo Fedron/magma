@@ -9,8 +9,7 @@ use super::device::Device;
 pub struct Align16<T>(pub T);
 
 pub struct PushConstants {
-    pub transform: Align16<cgmath::Matrix2<f32>>,
-    pub translation: Align16<cgmath::Vector2<f32>>,
+    pub transform: Align16<cgmath::Matrix4<f32>>,
 }
 
 impl PushConstants {
@@ -81,7 +80,7 @@ impl Pipeline {
 
         let rasterization_state_info = vk::PipelineRasterizationStateCreateInfo::builder()
             .depth_clamp_enable(false)
-            .cull_mode(vk::CullModeFlags::BACK)
+            .cull_mode(vk::CullModeFlags::NONE)
             .front_face(vk::FrontFace::CLOCKWISE)
             .line_width(1.0)
             .polygon_mode(vk::PolygonMode::FILL)

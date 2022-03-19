@@ -30,7 +30,7 @@ impl SimpleRenderSystem {
     }
 
     /// Renders the given entities using the given command buffer
-    pub fn render_entities(&self, command_buffer: vk::CommandBuffer, entities: &Vec<Entity>) {
+    pub fn render_entities(&self, command_buffer: vk::CommandBuffer, entities: &mut Vec<Entity>) {
         unsafe {
             self.device.device.cmd_bind_pipeline(
                 command_buffer,
@@ -38,12 +38,13 @@ impl SimpleRenderSystem {
                 self.pipeline.graphics_pipeline,
             );
 
-            for entity in entities.iter() {
+            for entity in entities.iter_mut() {
+                entity.transform.rotation.y += 0.1;
+                entity.transform.rotation.x += 0.05;
                 entity.model().bind(command_buffer);
 
                 let push = PushConstants {
                     transform: Align16(entity.transform_matrix()),
-                    translation: Align16(entity.transform.position),
                 };
 
                 self.device.device.cmd_push_constants(
