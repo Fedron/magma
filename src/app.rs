@@ -7,8 +7,9 @@ use winit::{
 
 use crate::{
     camera::Camera,
-    entity::Entity,
+    entity::{Entity, Transform},
     input::KeyboardInput,
+    movement_system,
     renderer::{device::Device, simple_render_system::SimpleRenderSystem, Renderer},
     utils,
 };
@@ -72,15 +73,20 @@ impl App {
             self.device.clone(),
             self.renderer.get_swapchain_render_pass(),
         );
-        let camera = Camera::from_perspective(
+
+        let mut camera = Camera::from_perspective(
             cgmath::Deg(50.0).into(),
             self.renderer.aspect_ratio(),
             0.1,
             10.0,
         );
+        let mut camera_transform = Transform {
+            position: cgmath::Point3::new(0.0, 0.0, 0.0),
+            rotation: cgmath::Point3::new(0.0, 0.0, 0.0),
+            scale: cgmath::Point3::new(1.0, 1.0, 1.0),
+        };
 
-        let mut last_time = std::time::Instant::now();
-
+        let delta_time = 1.0 / 60.0;
         event_loop.run(move |event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
@@ -94,12 +100,24 @@ impl App {
                 _ => {}
             },
             Event::MainEventsCleared => {
-                let current_time = std::time::Instant::now();
-                let frame_time = current_time - last_time;
-                last_time = current_time;
-
-                // Is the 'w' key pressed
-                println!("{}", self.keyboard_input.is_key_pressed(17));
+                movement_system::move_in_xz_plane(
+                    &self.keyboard_input,
+                    &mut camera_transform,
+                    delta_time,
+                );
+                //println!("{:#?}", camera_transform);
+                camera.set_view_rotation(
+                    cgmath::Vector3::new(
+                        camera_transform.position.x,
+                        camera_transform.position.y,
+                        camera_transform.position.z,
+                    ),
+                    cgmath::Vector3::new(
+                        camera_transform.rotation.x,
+                        camera_transform.rotation.y,
+                        camera_transform.rotation.z,
+                    ),
+                );
                 self.window.request_redraw();
             }
             Event::RedrawRequested(_) => {

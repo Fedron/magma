@@ -7,6 +7,7 @@ use crate::model::Model;
 
 static ENTITY_COUNT: AtomicU32 = AtomicU32::new(0);
 
+#[derive(Debug)]
 pub struct Transform {
     pub position: cgmath::Point3<f32>,
     pub rotation: cgmath::Point3<f32>,
