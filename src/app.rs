@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use winit::{
-    event::{ElementState, Event, WindowEvent, VirtualKeyCode, ScanCode},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
@@ -8,6 +8,7 @@ use winit::{
 use crate::{
     camera::Camera,
     entity::Entity,
+    input::KeyboardInput,
     renderer::{device::Device, simple_render_system::SimpleRenderSystem, Renderer},
     utils,
 };
@@ -25,7 +26,7 @@ pub struct App {
     /// Current size of the window in pixels
     window_size: winit::dpi::PhysicalSize<u32>,
     /// Currently pressed keys
-    pressed_keys: Vec<winit::event::ScanCode>,
+    keyboard_input: KeyboardInput,
 }
 
 impl App {
@@ -44,7 +45,7 @@ impl App {
             renderer,
             entities: Vec::new(),
             window_size,
-            pressed_keys: Vec::new(),
+            keyboard_input: KeyboardInput::new(),
         }
     }
 
@@ -88,21 +89,7 @@ impl App {
                     self.renderer.recreate_swapchain();
                 }
                 WindowEvent::KeyboardInput { input, .. } => {
-                    if input.state == ElementState::Released {
-                        if let Some(index) = self
-                            .pressed_keys
-                            .iter()
-                            .position(|&key| key == input.scancode)
-                        {
-                            self.pressed_keys.remove(index);
-                        }
-                    } else if input.state == ElementState::Pressed
-                        && !self
-                            .pressed_keys
-                            .contains(&input.scancode)
-                    {
-                        self.pressed_keys.push(input.scancode)
-                    }
+                    self.keyboard_input.register_input(input);
                 }
                 _ => {}
             },
@@ -112,7 +99,7 @@ impl App {
                 last_time = current_time;
 
                 // Is the 'w' key pressed
-                println!("{}", self.is_key_pressed(17));
+                println!("{}", self.keyboard_input.is_key_pressed(17));
                 self.window.request_redraw();
             }
             Event::RedrawRequested(_) => {
@@ -137,9 +124,5 @@ impl App {
             }
             _ => {}
         });
-    }
-
-    pub fn is_key_pressed(&self, key: ScanCode) -> bool {
-        self.pressed_keys.contains(&key)
     }
 }
