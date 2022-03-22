@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 magma_window = { path = "../magma_window", version = "0.1.0" }
+magma_entities = { path = "../magma_entities", version = "0.1.0" }

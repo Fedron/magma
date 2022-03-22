@@ -10,6 +10,10 @@ pub mod input {
     pub use magma_input::prelude::*;
 }
 
+pub mod entities {
+    pub use magma_entities::prelude::*;
+}
+
 pub mod prelude {
     pub use crate::app::App;
 }
