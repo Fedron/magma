@@ -6,7 +6,7 @@ fn main() -> anyhow::Result<()> {
         .init()
         .unwrap();
 
-    let app = App::new();
+    let app = App::builder().window_title("Cube Example").build();
     app.main_loop();
 
     Ok(())
