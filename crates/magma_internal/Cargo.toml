@@ -1,0 +1,8 @@
+[package]
+name = "magma_internal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+magma_app = { path = "../magma_app", version = "0.1.0" }
+magma_window = { path = "../magma_window", version = "0.1.0" }

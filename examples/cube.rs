@@ -1,13 +1,13 @@
-use magma::app::App;
+use magma::prelude::*;
 
 fn main() -> anyhow::Result<()> {
     simple_logger::SimpleLogger::new()
         .without_timestamps()
         .init()
         .unwrap();
-
-    let app = App::builder().window_title("Cube Example").build();
-    app.main_loop();
+    
+    let app = App::new();
+    app.run();
 
     Ok(())
 }
