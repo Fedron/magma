@@ -10,8 +10,6 @@ pub mod swapchain;
 use self::{device::Device, swapchain::Swapchain};
 
 pub struct Renderer {
-    /// Handle to the window that is being drawn to
-    window: Rc<Window>,
     /// Handle to logical device
     device: Rc<Device>,
     /// Handle to currently active swapchain
@@ -26,7 +24,8 @@ pub struct Renderer {
 
 impl Renderer {
     /// Creates a new Renderer that will draw to the window provided
-    pub fn new(window: Rc<Window>, device: Rc<Device>) -> Renderer {
+    pub fn new(window: &Window) -> Renderer {
+        let device = Rc::new(Device::new(window));
         let swapchain = Swapchain::new(device.clone());
         let command_buffers = Renderer::create_command_buffers(
             &device.device,
@@ -35,7 +34,6 @@ impl Renderer {
         );
 
         Renderer {
-            window,
             device,
             swapchain,
             command_buffers,
