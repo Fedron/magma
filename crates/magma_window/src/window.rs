@@ -1,4 +1,6 @@
-use magma_input::prelude::{InputHandler, KeyCode};
+use std::{cell::RefCell, rc::Rc};
+
+use magma_input::prelude::InputHandler;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -49,7 +51,6 @@ impl WindowBuilder {
         Window {
             _window: window,
             event_loop,
-            inputs: InputHandler::new(),
         }
     }
 }
@@ -57,7 +58,6 @@ impl WindowBuilder {
 pub struct Window {
     _window: WinitWindow,
     event_loop: EventLoop<()>,
-    inputs: InputHandler,
 }
 
 impl Window {
@@ -66,43 +66,45 @@ impl Window {
         WindowBuilder::new()
     }
 
-    pub fn inputs(self) -> InputHandler {
-        self.inputs
-    }
-
     /// Initialises a winit _window and event loop
     ///
     /// Returns the _window, and the event loop used by the window
     pub fn new_winit(width: u32, height: u32, title: &'static str) -> (WinitWindow, EventLoop<()>) {
         let event_loop = EventLoop::new();
-        let _window = WinitWindowBuilder::new()
+        let window = WinitWindowBuilder::new()
             .with_title(title)
             .with_inner_size(winit::dpi::LogicalSize::new(width, height))
             .build(&event_loop)
             .expect("");
 
-        (_window, event_loop)
+        (window, event_loop)
     }
 
     /// Runs the winit event loop
     ///
     /// Blocking operation but returns once the event loop is quit.
-    pub fn run_event_loop(mut self) {
+    pub fn run_event_loop<F>(
+        mut self,
+        input_handler: Rc<RefCell<InputHandler>>,
+        mut main_loop: F
+    ) where
+        F: FnMut()
+    {
         self.event_loop
             .run_return(move |event, _, control_flow| match event {
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::KeyboardInput { input, .. } => {
                         let native_input = convert_winit_keyboard_to_magma(input);
-                        self.inputs.process_keyboard_input(native_input);
-
-                        // TODO: Remove
-                        if self.inputs.is_key_pressed(KeyCode::Escape) {
-                            *control_flow = ControlFlow::Exit
-                        }
+                        input_handler
+                            .borrow_mut()
+                            .process_keyboard_input(native_input);
                     }
                     _ => {}
                 },
+                Event::MainEventsCleared => {
+                    main_loop();
+                }
                 _ => {}
             });
     }

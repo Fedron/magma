@@ -15,9 +15,14 @@ impl World {
         self.entities.push(entity);
     }
 
-    pub fn update(&self) {
-        for entity in self.entities.iter() {
+    pub fn update(&mut self) {
+        for entity in self.entities.iter_mut() {
             entity.update();
+        }
+    }
+
+    pub fn draw(&mut self) {
+        for entity in self.entities.iter_mut() {
             entity.draw();
         }
     }
