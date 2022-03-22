@@ -16,4 +16,6 @@ pub mod entities {
 
 pub mod prelude {
     pub use crate::app::App;
+    pub use crate::entities::*;
+    pub use crate::input::*;
 }
