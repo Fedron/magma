@@ -14,8 +14,13 @@ pub mod entities {
     pub use magma_entities::prelude::*;
 }
 
+pub mod render {
+    pub use magma_render::prelude::*;
+}
+
 pub mod prelude {
     pub use crate::app::App;
     pub use crate::entities::*;
     pub use crate::input::*;
+    pub use crate::render::*;
 }
