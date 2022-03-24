@@ -49,14 +49,14 @@ impl WindowBuilder {
         let (window, event_loop) = Window::new_winit(self.width, self.height, self.title);
 
         Window {
-            _window: window,
+            window: Rc::new(window),
             event_loop,
         }
     }
 }
 
 pub struct Window {
-    _window: WinitWindow,
+    window: Rc<WinitWindow>,
     event_loop: EventLoop<()>,
 }
 
@@ -64,6 +64,10 @@ impl Window {
     /// Creates a new [WindowBuilder] with default values
     pub fn builder() -> WindowBuilder {
         WindowBuilder::new()
+    }
+
+    pub fn winit_window(&self) -> Rc<WinitWindow> {
+        self.window.clone()
     }
 
     /// Initialises a winit _window and event loop
@@ -83,12 +87,9 @@ impl Window {
     /// Runs the winit event loop
     ///
     /// Blocking operation but returns once the event loop is quit.
-    pub fn run_event_loop<F>(
-        mut self,
-        input_handler: Rc<RefCell<InputHandler>>,
-        mut main_loop: F
-    ) where
-        F: FnMut()
+    pub fn run_event_loop<F>(mut self, input_handler: Rc<RefCell<InputHandler>>, mut main_loop: F)
+    where
+        F: FnMut(),
     {
         self.event_loop
             .run_return(move |event, _, control_flow| match event {

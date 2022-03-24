@@ -3,12 +3,13 @@ use std::{marker::PhantomData, rc::Rc};
 
 use crate::{
     device::{BufferUsage, Device},
-    render_system::Vertex,
+    renderer::{PushConstantData, Vertex},
 };
 
 /// Represents a collection of vertices that can be drawn to the window
-pub struct Model<V>
+pub struct Model<P, V>
 where
+    P: PushConstantData,
     V: Vertex,
 {
     /// Handle to the Vulkan device used to create buffers and memory for vertex data
@@ -28,18 +29,24 @@ where
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkBuffer.html
     indices_buffer: vk::Buffer,
     /// Handle to the memory of the buffer holding the indices data
-    ///i
+    ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDeviceMemory.html
     indices_buffer_memory: vk::DeviceMemory,
-    phantom: PhantomData<V>,
+    push_phantom: PhantomData<P>,
+    vertex_phantom: PhantomData<V>,
 }
 
-impl<V> Model<V>
+impl<P, V> Model<P, V>
 where
+    P: PushConstantData,
     V: Vertex,
 {
     /// Creates new vertex buffers for the model on the GPU from the provided vertices
-    pub fn new(device: Rc<Device>, vertices: Vec<V>, indices: Vec<u32>) -> Model<V> {
+    pub fn new(
+        device: Rc<Device>,
+        vertices: Vec<V>,
+        indices: Vec<u32>,
+    ) -> Model<P, V> {
         let vertex_count = indices.len();
         if vertex_count < 3 {
             log::error!("Cannot create a model with less than 3 vertices");
@@ -59,26 +66,14 @@ where
             vertex_count,
             indices_buffer,
             indices_buffer_memory,
-            phantom: PhantomData,
+            push_phantom: PhantomData,
+            vertex_phantom: PhantomData,
         }
     }
 
     /// Draws the model vertices to the command buffer
     pub fn draw(&self, command_buffer: vk::CommandBuffer) {
-        unsafe {
-            self.device.device.cmd_draw_indexed(
-                command_buffer,
-                self.vertex_count as u32,
-                1,
-                0,
-                0,
-                0,
-            );
-        };
-    }
-
-    /// Binds the model vertices to the command buffer
-    pub fn bind(&self, command_buffer: vk::CommandBuffer) {
+        // Bind
         let buffers = [self.vertex_buffer];
         let offsets = [0];
 
@@ -94,11 +89,24 @@ where
                 vk::IndexType::UINT32,
             );
         };
+
+        // Draw
+        unsafe {
+            self.device.device.cmd_draw_indexed(
+                command_buffer,
+                self.vertex_count as u32,
+                1,
+                0,
+                0,
+                0,
+            );
+        };
     }
 }
 
-impl<V> Drop for Model<V>
+impl<P, V> Drop for Model<P, V>
 where
+    P: PushConstantData,
     V: Vertex,
 {
     fn drop(&mut self) {

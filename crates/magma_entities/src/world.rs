@@ -1,12 +1,14 @@
 use crate::prelude::Entity;
 
 pub struct World {
+    id: u32,
     entities: Vec<Box<dyn Entity>>,
 }
 
 impl World {
     pub fn new() -> World {
         World {
+            id: 0,
             entities: Vec::new(),
         }
     }
@@ -27,3 +29,17 @@ impl World {
         }
     }
 }
+
+impl std::hash::Hash for World {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl PartialEq for World {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for World {}
