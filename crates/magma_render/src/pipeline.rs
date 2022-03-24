@@ -1,17 +1,21 @@
 use ash::vk;
 use std::{ffi::CString, path::Path, rc::Rc};
 
-use crate::{device::Device, render_system::Vertex};
+use crate::{
+    device::Device,
+    model::Model,
+    renderer::{PushConstantData, Vertex},
+};
 
 pub struct PipelineConfigInfo {
     viewport_info: vk::PipelineViewportStateCreateInfo,
     input_assembly_info: vk::PipelineInputAssemblyStateCreateInfo,
     rasterization_info: vk::PipelineRasterizationStateCreateInfo,
     multisample_info: vk::PipelineMultisampleStateCreateInfo,
-    color_blend_attachment: Rc<vk::PipelineColorBlendAttachmentState>,
-    color_blend_info: Rc<vk::PipelineColorBlendStateCreateInfo>,
+    _color_blend_attachment: Rc<vk::PipelineColorBlendAttachmentState>,
+    color_blend_info: vk::PipelineColorBlendStateCreateInfo,
     depth_stencil_info: vk::PipelineDepthStencilStateCreateInfo,
-    dynamic_state_enables: Vec<vk::DynamicState>,
+    _dynamic_state_enables: Vec<vk::DynamicState>,
     dynamic_state_info: vk::PipelineDynamicStateCreateInfo,
     subpass: u32,
 }
@@ -50,20 +54,22 @@ impl Default for PipelineConfigInfo {
             .alpha_to_coverage_enable(false)
             .build();
 
-        let color_blend_attachment = vk::PipelineColorBlendAttachmentState::builder()
-            .blend_enable(false)
-            .color_write_mask(vk::ColorComponentFlags::RGBA)
-            .src_color_blend_factor(vk::BlendFactor::ONE)
-            .dst_color_blend_factor(vk::BlendFactor::ZERO)
-            .color_blend_op(vk::BlendOp::ADD)
-            .src_alpha_blend_factor(vk::BlendFactor::ONE)
-            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-            .alpha_blend_op(vk::BlendOp::ADD)
-            .build();
+        let color_blend_attachment = Rc::new(
+            vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(vk::ColorComponentFlags::RGBA)
+                .blend_enable(false)
+                .src_color_blend_factor(vk::BlendFactor::ONE)
+                .dst_color_blend_factor(vk::BlendFactor::ZERO)
+                .color_blend_op(vk::BlendOp::ADD)
+                .src_alpha_blend_factor(vk::BlendFactor::ONE)
+                .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+                .alpha_blend_op(vk::BlendOp::ADD)
+                .build(),
+        );
 
         let color_blend_info = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
-            .attachments(&[color_blend_attachment])
+            .attachments(std::slice::from_ref(&color_blend_attachment))
             .blend_constants([0.0, 0.0, 0.0, 0.0])
             .build();
 
@@ -99,40 +105,48 @@ impl Default for PipelineConfigInfo {
             input_assembly_info,
             rasterization_info,
             multisample_info,
-            color_blend_attachment: Rc::new(color_blend_attachment),
-            color_blend_info: Rc::new(color_blend_info),
+            _color_blend_attachment: color_blend_attachment,
+            color_blend_info,
             depth_stencil_info,
-            dynamic_state_enables,
+            _dynamic_state_enables: dynamic_state_enables,
             dynamic_state_info,
             subpass: 0,
         }
     }
 }
 
-pub struct Pipeline {
+pub trait RenderPipeline {
+    fn draw(&self, command_buffer: vk::CommandBuffer);
+}
+
+pub struct Pipeline<P, V>
+where
+    P: PushConstantData,
+    V: Vertex,
+{
     device: Rc<Device>,
     pub graphics_pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
+    models: Vec<Rc<Model<P, V>>>,
 }
 
-impl Pipeline {
-    pub fn new<V>(
+impl<P, V> Pipeline<P, V>
+where
+    P: PushConstantData,
+    V: Vertex,
+{
+    pub fn new(
         device: Rc<Device>,
         config: PipelineConfigInfo,
         render_pass: &vk::RenderPass,
-        layout: vk::PipelineLayout,
         vertex_shader_file: &Path,
         fragment_shader_file: &Path,
-    ) -> Pipeline
-    where
-        V: Vertex,
-    {
+    ) -> Pipeline<P, V> {
         let vertex_shader_module =
-            Pipeline::create_shader_module(&device.as_ref().device, vertex_shader_file);
+            Pipeline::<P, V>::create_shader_module(&device.as_ref().device, vertex_shader_file);
         let fragment_shader_module =
-            Pipeline::create_shader_module(&device.as_ref().device, fragment_shader_file);
+            Pipeline::<P, V>::create_shader_module(&device.as_ref().device, fragment_shader_file);
 
-        // Compile shaders
         let entry_point = CString::new("main").unwrap();
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::builder()
@@ -153,6 +167,26 @@ impl Pipeline {
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_attribute_descriptions(&attribute_descriptions)
             .vertex_binding_descriptions(&binding_descriptions);
+
+        let push_constant_size = std::mem::size_of::<P>() as u32;
+        let push_constant_ranges = if push_constant_size == 0 {
+            vec![]
+        } else {
+            vec![vk::PushConstantRange::builder()
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .offset(0)
+                .size(push_constant_size)
+                .build()]
+        };
+
+        let layout_info =
+            vk::PipelineLayoutCreateInfo::builder().push_constant_ranges(&push_constant_ranges);
+        let layout = unsafe {
+            device
+                .device
+                .create_pipeline_layout(&layout_info, None)
+                .expect("Failed to create pipeline layout")
+        };
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
             .stages(&shader_stages)
@@ -193,17 +227,14 @@ impl Pipeline {
             device,
             graphics_pipeline,
             layout,
+            models: Vec::new(),
         }
     }
 
-    pub fn bind(&self, device: &ash::Device, command_buffer: vk::CommandBuffer) {
-        unsafe {
-            device.cmd_bind_pipeline(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.graphics_pipeline,
-            );
-        };
+    pub fn create_model(&mut self, vertices: Vec<V>, indices: Vec<u32>) -> Rc<Model<P, V>> {
+        let model = Rc::new(Model::new(self.device.clone(), vertices, indices));
+        self.models.push(model.clone());
+        model
     }
 
     fn create_shader_module(device: &ash::Device, shader_path: &Path) -> vk::ShaderModule {
@@ -227,7 +258,31 @@ impl Pipeline {
     }
 }
 
-impl Drop for Pipeline {
+impl<P, V> RenderPipeline for Pipeline<P, V>
+where
+    P: PushConstantData,
+    V: Vertex,
+{
+    fn draw(&self, command_buffer: vk::CommandBuffer) {
+        unsafe {
+            self.device.device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.graphics_pipeline,
+            );
+        };
+
+        for model in self.models.iter() {
+            model.draw(command_buffer);
+        }
+    }
+}
+
+impl<P, V> Drop for Pipeline<P, V>
+where
+    P: PushConstantData,
+    V: Vertex,
+{
     fn drop(&mut self) {
         unsafe {
             self.device

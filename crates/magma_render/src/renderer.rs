@@ -1,8 +1,35 @@
 use ash::vk;
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
 use winit::window::Window;
 
-use crate::{device::Device, swapchain::Swapchain};
+use crate::{
+    device::Device,
+    pipeline::{Pipeline, PipelineConfigInfo},
+    swapchain::Swapchain,
+};
+
+pub type VertexAttributeDescription = vk::VertexInputAttributeDescription;
+pub type VertexBindingDescription = vk::VertexInputBindingDescription;
+pub type VertexInputRate = vk::VertexInputRate;
+pub type Format = vk::Format;
+
+pub trait Vertex {
+    fn get_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription>;
+    fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription>;
+}
+
+pub trait PushConstantData {
+    fn as_bytes(&self) -> &[u8]
+    where
+        Self: Sized,
+    {
+        unsafe {
+            let size_in_bytes = std::mem::size_of::<Self>();
+            let size_in_u8 = size_in_bytes / std::mem::size_of::<u8>();
+            std::slice::from_raw_parts(self as *const Self as *const u8, size_in_u8)
+        }
+    }
+}
 
 pub struct Renderer {
     window: Rc<Window>,
@@ -31,6 +58,26 @@ impl Renderer {
             current_image_index: 0,
             is_frame_started: false,
         }
+    }
+
+    pub fn create_pipeline<P: 'static, V: 'static>(
+        &mut self,
+        vertex_shader: &Path,
+        fragment_shader: &Path,
+    ) -> Pipeline<P, V>
+    where
+        P: PushConstantData,
+        V: Vertex,
+    {
+        let config = PipelineConfigInfo::default();
+
+        Pipeline::new(
+            self.device.clone(),
+            config,
+            &self.swapchain.render_pass,
+            vertex_shader,
+            fragment_shader,
+        )
     }
 
     /// Recreates the swapchain and graphics pipeline to match the new window size
@@ -262,6 +309,15 @@ impl Renderer {
             panic!("Failed to get command buffer, see above");
         }
         self.command_buffers[self.current_image_index]
+    }
+
+    pub fn wait_device_idle(&self) {
+        unsafe {
+            self.device
+                .device
+                .device_wait_idle()
+                .expect("Failed to wait for device to idle");
+        }
     }
 }
 
