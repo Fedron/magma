@@ -9,3 +9,5 @@ magma_window = { path = "../magma_window", version = "0.1.0" }
 magma_input = { path = "../magma_input", version = "0.1.0" }
 magma_entities = { path = "../magma_entities", version = "0.1.0" }
 magma_render = { path = "../magma_render", version = "0.1.0" }
+magma_derive = { path = "../magma_derive", version = "0.1.0" }
+memoffset = "0.6.5"

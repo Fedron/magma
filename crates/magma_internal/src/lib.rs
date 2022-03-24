@@ -18,9 +18,15 @@ pub mod render {
     pub use magma_render::prelude::*;
 }
 
+pub mod derive {
+    pub use magma_derive::{PushConstantData, Vertex};
+}
+
 pub mod prelude {
     pub use crate::app::App;
+    pub use crate::derive::*;
     pub use crate::entities::*;
     pub use crate::input::*;
     pub use crate::render::*;
+    pub use memoffset::offset_of;
 }

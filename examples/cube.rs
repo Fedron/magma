@@ -1,56 +1,15 @@
+use magma::prelude::*;
 use std::{path::Path, rc::Rc};
 
-use magma::prelude::*;
-use memoffset::offset_of;
-
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Vertex)]
 pub struct SimpleVertex {
     pub position: [f32; 3],
     pub color: [f32; 3],
 }
 
-// TODO: Make this using a derive macro
-impl Vertex for SimpleVertex {
-    fn get_attribute_descriptions() -> Vec<VertexAttributeDescription> {
-        vec![
-            VertexAttributeDescription {
-                binding: 0,
-                location: 0,
-                format: Format::R32G32B32_SFLOAT,
-                offset: offset_of!(SimpleVertex, position) as u32,
-            },
-            VertexAttributeDescription {
-                binding: 0,
-                location: 1,
-                format: Format::R32G32B32_SFLOAT,
-                offset: offset_of!(SimpleVertex, color) as u32,
-            },
-        ]
-    }
-
-    fn get_binding_descriptions() -> Vec<VertexBindingDescription> {
-        vec![VertexBindingDescription {
-            binding: 0,
-            stride: std::mem::size_of::<SimpleVertex>() as u32,
-            input_rate: VertexInputRate::VERTEX,
-        }]
-    }
-}
-
+#[derive(PushConstantData)]
 pub struct SimplePushConstantData {}
-impl PushConstantData for SimplePushConstantData {
-    fn as_bytes(&self) -> &[u8]
-    where
-        Self: Sized,
-    {
-        unsafe {
-            let size_in_bytes = std::mem::size_of::<Self>();
-            let size_in_u8 = size_in_bytes / std::mem::size_of::<u8>();
-            std::slice::from_raw_parts(self as *const Self as *const u8, size_in_u8)
-        }
-    }
-}
 
 fn main() -> anyhow::Result<()> {
     simple_logger::SimpleLogger::new()
