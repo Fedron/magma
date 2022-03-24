@@ -72,6 +72,7 @@ fn generate_attribute_descriptions(body: &syn::Data) -> Vec<proc_macro2::TokenSt
 
 fn generate_attribute_description(field: &syn::Field) -> proc_macro2::TokenStream {
     let field_name = field.ident.as_ref().unwrap();
+    let field_type = get_field_type(field);
 
     let location_attr = field
         .attrs
@@ -102,8 +103,62 @@ fn generate_attribute_description(field: &syn::Field) -> proc_macro2::TokenStrea
         VertexAttributeDescription {
             binding: 0,
             location: #location_lit,
-            format: Format::R32G32B32_SFLOAT,
+            format: #field_type,
             offset: offset_of!(Self, #field_name) as u32
         }
+    }
+}
+
+fn get_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
+    let field_name = &field.ident.as_ref().unwrap();
+    match &field.ty {
+        syn::Type::Array(array) => {
+            let array_type = match &*array.elem {
+                syn::Type::Path(path) => path
+                    .path
+                    .get_ident()
+                    .expect("Failed to get ident of array")
+                    .to_string(),
+                _ => panic!("Failed too read array type on field {}", field_name),
+            };
+
+            let array_len = match &array.len {
+                syn::Expr::Lit(lit) => match &lit.lit {
+                    syn::Lit::Int(i) => i.base10_parse::<u32>().unwrap(),
+                    _ => panic!("Field {} had unexpected literal in array", field_name),
+                },
+                _ => panic!("Field {} had unexpected literal in array", field_name),
+            };
+
+            if array_type.eq("f32".into()) {
+                match array_len {
+                    1 => quote! { Format::R32_SFLOAT },
+                    2 => quote! { Format::R32G32_SFLOAT },
+                    3 => quote! { Format::R32G32B32_SFLOAT },
+                    4 => quote! { Format::R32G32B32A32_SFLOAT },
+                    _ => panic!(
+                        "Field {} has invalid array length, should be 1, 2, 3, or 4",
+                        field_name
+                    ),
+                }
+            } else if array_type.eq("i32".into()) {
+                match array_len {
+                    1 => quote! { Format::R32_SINT },
+                    2 => quote! { Format::R32G32_SINT },
+                    3 => quote! { Format::R32G32B32_SINT },
+                    4 => quote! { Format::R32G32B32A32_SINT },
+                    _ => panic!(
+                        "Field {} has invalid array length, should be 1, 2, 3, or 4",
+                        field_name
+                    ),
+                }
+            } else {
+                panic!(
+                    "Field {} has an invalid array type, should be f32 or i32",
+                    field_name
+                );
+            }
+        }
+        _ => panic!("Field {} should be an array, float or int type", field_name),
     }
 }
