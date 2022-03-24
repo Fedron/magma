@@ -4,7 +4,9 @@ use std::{path::Path, rc::Rc};
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Vertex)]
 pub struct SimpleVertex {
+    #[location = 0]
     pub position: [f32; 3],
+    #[location = 1]
     pub color: [f32; 3],
 }
 
