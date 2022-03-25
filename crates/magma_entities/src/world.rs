@@ -1,8 +1,9 @@
 use crate::prelude::Entity;
+use std::{cell::RefCell, rc::Rc};
 
 pub struct World {
     id: u32,
-    entities: Vec<Box<dyn Entity>>,
+    entities: Vec<Rc<RefCell<dyn Entity>>>,
 }
 
 impl World {
@@ -13,19 +14,19 @@ impl World {
         }
     }
 
-    pub fn add_entity(&mut self, entity: Box<dyn Entity>) {
+    pub fn add_entity(&mut self, entity: Rc<RefCell<dyn Entity>>) {
         self.entities.push(entity);
     }
 
     pub fn update(&mut self) {
         for entity in self.entities.iter_mut() {
-            entity.update();
+            entity.borrow_mut().update();
         }
     }
 
     pub fn draw(&mut self) {
         for entity in self.entities.iter_mut() {
-            entity.draw();
+            entity.borrow_mut().draw();
         }
     }
 }

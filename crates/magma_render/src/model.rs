@@ -32,7 +32,7 @@ where
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDeviceMemory.html
     indices_buffer_memory: vk::DeviceMemory,
-    push_phantom: PhantomData<P>,
+    push_constants: Option<P>,
     vertex_phantom: PhantomData<V>,
 }
 
@@ -42,11 +42,7 @@ where
     V: Vertex,
 {
     /// Creates new vertex buffers for the model on the GPU from the provided vertices
-    pub fn new(
-        device: Rc<Device>,
-        vertices: Vec<V>,
-        indices: Vec<u32>,
-    ) -> Model<P, V> {
+    pub fn new(device: Rc<Device>, vertices: Vec<V>, indices: Vec<u32>) -> Model<P, V> {
         let vertex_count = indices.len();
         if vertex_count < 3 {
             log::error!("Cannot create a model with less than 3 vertices");
@@ -66,18 +62,23 @@ where
             vertex_count,
             indices_buffer,
             indices_buffer_memory,
-            push_phantom: PhantomData,
+            push_constants: None,
             vertex_phantom: PhantomData,
         }
     }
 
+    pub fn set_push_constants(&mut self, push_constants: P) {
+        self.push_constants = Some(push_constants);
+    }
+
     /// Draws the model vertices to the command buffer
-    pub fn draw(&self, command_buffer: vk::CommandBuffer) {
+    pub fn draw(&self, command_buffer: vk::CommandBuffer, layout: vk::PipelineLayout) {
         // Bind
         let buffers = [self.vertex_buffer];
         let offsets = [0];
 
         unsafe {
+            // Bind
             self.device
                 .device
                 .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
@@ -88,10 +89,17 @@ where
                 0,
                 vk::IndexType::UINT32,
             );
-        };
 
-        // Draw
-        unsafe {
+            if let Some(push_constants) = &self.push_constants {
+                self.device.device.cmd_push_constants(
+                    command_buffer,
+                    layout,
+                    vk::ShaderStageFlags::VERTEX,
+                    0,
+                    push_constants.as_bytes(),
+                )
+            }
+            // Draw
             self.device.device.cmd_draw_indexed(
                 command_buffer,
                 self.vertex_count as u32,

@@ -1,5 +1,5 @@
 use ash::vk;
-use std::{ffi::CString, path::Path, rc::Rc};
+use std::{cell::RefCell, ffi::CString, path::Path, rc::Rc};
 
 use crate::{
     device::Device,
@@ -127,7 +127,7 @@ where
     device: Rc<Device>,
     pub graphics_pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
-    models: Vec<Rc<Model<P, V>>>,
+    models: Vec<Rc<RefCell<Model<P, V>>>>,
 }
 
 impl<P, V> Pipeline<P, V>
@@ -231,8 +231,16 @@ where
         }
     }
 
-    pub fn create_model(&mut self, vertices: Vec<V>, indices: Vec<u32>) -> Rc<Model<P, V>> {
-        let model = Rc::new(Model::new(self.device.clone(), vertices, indices));
+    pub fn create_model(
+        &mut self,
+        vertices: Vec<V>,
+        indices: Vec<u32>,
+    ) -> Rc<RefCell<Model<P, V>>> {
+        let model = Rc::new(RefCell::new(Model::new(
+            self.device.clone(),
+            vertices,
+            indices,
+        )));
         self.models.push(model.clone());
         model
     }
@@ -273,7 +281,7 @@ where
         };
 
         for model in self.models.iter() {
-            model.draw(command_buffer);
+            model.borrow().draw(command_buffer, self.layout);
         }
     }
 }
