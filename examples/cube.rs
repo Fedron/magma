@@ -12,7 +12,7 @@ pub struct SimpleVertex {
 
 #[derive(PushConstantData)]
 pub struct SimplePushConstantData {
-    transform: Mat4,
+    _transform: Mat4,
 }
 
 pub struct Cube {
@@ -40,7 +40,7 @@ pub struct CameraController {
 
 impl Entity for CameraController {
     fn update(&mut self) {
-        self.camera.look_at(Vec3::new(0.0, 4.0, -3.0), Vec3::ZERO);
+        self.camera.look_at(self.transform.position, Vec3::ZERO);
     }
 
     fn draw(&mut self) {
@@ -49,7 +49,7 @@ impl Entity for CameraController {
         cube.model
             .borrow_mut()
             .set_push_constants(SimplePushConstantData {
-                transform: self.camera.projection_matrix()
+                _transform: self.camera.projection_matrix()
                     * self.camera.view_matrix()
                     * cube.transform.as_matrix(),
             });
@@ -130,7 +130,7 @@ fn main() -> anyhow::Result<()> {
     camera.set_perspective(50_f32.to_radians(), app.aspect_ratio(), 0.1, 10.0);
     let camera_controller = Rc::new(RefCell::new(CameraController {
         transform: Transform {
-            position: Vec3::ZERO,
+            position: Vec3::new(0.0, 0.0, -3.0),
             rotation: Vec3::ZERO,
             scale: Vec3::ONE,
         },
