@@ -1,5 +1,5 @@
-use magma::prelude::*;
-use std::{path::Path, rc::Rc};
+use magma::{app::AppWorld, prelude::*};
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Vertex)]
@@ -11,7 +11,50 @@ pub struct SimpleVertex {
 }
 
 #[derive(PushConstantData)]
-pub struct SimplePushConstantData {}
+pub struct SimplePushConstantData {
+    transform: Mat4,
+}
+
+pub struct Cube {
+    pub transform: Transform,
+    pub model: Rc<RefCell<Model<SimplePushConstantData, SimpleVertex>>>,
+}
+
+impl Entity for Cube {
+    fn update(&mut self) {
+        self.transform.rotation = Vec3::new(
+            self.transform.rotation.x + 0.002,
+            self.transform.rotation.y + 0.004,
+            self.transform.rotation.z,
+        );
+    }
+
+    fn draw(&mut self) {}
+}
+
+pub struct CameraController {
+    pub transform: Transform,
+    pub camera: Camera,
+    pub cube: Rc<RefCell<Cube>>,
+}
+
+impl Entity for CameraController {
+    fn update(&mut self) {
+        self.camera.look_at(Vec3::new(0.0, 4.0, -3.0), Vec3::ZERO);
+    }
+
+    fn draw(&mut self) {
+        let cube = self.cube.borrow_mut();
+
+        cube.model
+            .borrow_mut()
+            .set_push_constants(SimplePushConstantData {
+                transform: self.camera.projection_matrix()
+                    * self.camera.view_matrix()
+                    * cube.transform.as_matrix(),
+            });
+    }
+}
 
 fn main() -> anyhow::Result<()> {
     simple_logger::SimpleLogger::new()
@@ -20,13 +63,13 @@ fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let mut app = App::new();
-    let cube_world = Rc::new(World::new());
+    let mut cube_world = World::new();
 
     let mut simple_pipeline = app.create_render_pipeline::<SimplePushConstantData, SimpleVertex>(
         &Path::new("simple.vert"),
         &Path::new("simple.frag"),
     );
-    simple_pipeline.create_model(
+    let cube = simple_pipeline.create_model(
         vec![
             SimpleVertex {
                 // Bottom-back-left 0
@@ -78,10 +121,28 @@ fn main() -> anyhow::Result<()> {
             1, 3, 2, 1, 0, 3, // Bottom face
         ],
     );
+    let cube = Rc::new(RefCell::new(Cube {
+        transform: Transform::new(),
+        model: cube,
+    }));
 
-    app.add_world(cube_world.clone());
-    app.set_active_world(cube_world.clone());
-    app.add_render_pipeline(cube_world.clone(), simple_pipeline);
+    let mut camera = Camera::new();
+    camera.set_perspective(50_f32.to_radians(), app.aspect_ratio(), 0.1, 10.0);
+    let camera_controller = Rc::new(RefCell::new(CameraController {
+        transform: Transform {
+            position: Vec3::ZERO,
+            rotation: Vec3::ZERO,
+            scale: Vec3::ONE,
+        },
+        camera,
+        cube: cube.clone(),
+    }));
+    cube_world.add_entity(camera_controller.clone());
+    cube_world.add_entity(cube.clone());
+
+    let cube_app_world = app.add_world(AppWorld::new(cube_world, camera));
+    app.set_active_world(cube_app_world);
+    app.add_render_pipeline(cube_app_world, simple_pipeline);
     app.run();
 
     Ok(())
