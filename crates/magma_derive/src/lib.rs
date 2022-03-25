@@ -1,3 +1,5 @@
+//! This crate provides useful derive macros for various `magma` functionality
+
 #![recursion_limit = "128"]
 
 use proc_macro::TokenStream;
@@ -7,6 +9,8 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+/// Implements the [`as_bytes`] function for [`PushConstantData`]. Required if you want
+/// to be able to pass your [`PushConstantData`] to a [`RenderPipeline`].
 #[proc_macro_derive(PushConstantData)]
 pub fn push_constant_data_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
@@ -28,6 +32,11 @@ pub fn push_constant_data_derive(input: TokenStream) -> TokenStream {
     .into()
 }
 
+/// Generates implementation for getting a [`Vertex`]'s attribute and binding descriptions.
+/// Only works on structs, and expects all attributes to be arrays of type f32 or i32.
+///
+/// Each attribute should be labeled with a `#[location = ?]` which should match the layout location
+/// in the shader the [`Vertex`] will be used in. This is not checked and is up to you to ensure.
 #[proc_macro_derive(Vertex, attributes(location))]
 pub fn vertex_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
@@ -35,6 +44,7 @@ pub fn vertex_derive(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
+/// Generates the main `impl` body
 fn generate_vertex_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
     let ident = &ast.ident;
     let attribute_descriptions = generate_attribute_descriptions(&ast.data);
@@ -58,6 +68,7 @@ fn generate_vertex_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
     }
 }
 
+/// Generates the attribute descriptions for each attribute in the struct
 fn generate_attribute_descriptions(body: &syn::Data) -> Vec<proc_macro2::TokenStream> {
     match body {
         syn::Data::Enum(_) => panic!("Cannot implement Vertex on an enum"),
@@ -70,6 +81,7 @@ fn generate_attribute_descriptions(body: &syn::Data) -> Vec<proc_macro2::TokenSt
     }
 }
 
+/// Generates a [`VertexAttributeDescription`] for a field
 fn generate_attribute_description(field: &syn::Field) -> proc_macro2::TokenStream {
     let field_name = field.ident.as_ref().unwrap();
     let field_type = get_field_type(field);
@@ -109,6 +121,9 @@ fn generate_attribute_description(field: &syn::Field) -> proc_macro2::TokenStrea
     }
 }
 
+/// Converts a rust type to the corresponding [`Format`]
+///
+/// Currently only array types are supported and are expected to be either f32 or i32
 fn get_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
     let field_name = &field.ident.as_ref().unwrap();
     match &field.ty {
