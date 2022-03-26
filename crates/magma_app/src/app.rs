@@ -48,7 +48,7 @@ impl App {
     pub fn new() -> App {
         // TODO: Allow the user to create a window using the builder so they can customize it
         let window = Window::builder().build();
-        let renderer = Renderer::new(window.winit_window());
+        let renderer = Renderer::new(window.winit_window(), [1.0, 0.0, 1.0, 1.0]);
 
         App {
             window,
@@ -112,8 +112,8 @@ impl App {
     }
 
     /// Runs the [`App`]s main loop, and starts the [`Window`]s event loop.
-    /// 
-    /// This is a blocking function call and won't finish until the [`Window`] exits its 
+    ///
+    /// This is a blocking function call and won't finish until the [`Window`] exits its
     /// event loop at which point the app will wait for the [`Renderer`] to finish with
     /// all tasks before returning.
     pub fn run(mut self) {

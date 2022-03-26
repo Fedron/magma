@@ -66,6 +66,8 @@ pub struct Renderer {
     /// - Set to true when [`Renderer::begin_frame`] is called
     /// - Set to false when [`Renderer::end_frame`] is called
     is_frame_started: bool,
+    /// Color the framebuffer is reset to when a render pass is started using [`Renderer::begin_swapchain_render_pass`]
+    clear_color: [f32; 4],
 }
 
 impl Renderer {
@@ -74,7 +76,7 @@ impl Renderer {
     /// The first dedicated GPU found is chosen as the device for this [`Renderer`]
     /// and a double-buffered [`Swapchain`] is created for the [`Renderer`] with the
     /// current extent of the window.
-    pub fn new(window: Rc<Window>) -> Renderer {
+    pub fn new(window: Rc<Window>, clear_color: [f32; 4]) -> Renderer {
         let device = Rc::new(Device::new(window.as_ref()));
         let swapchain = Swapchain::new(device.clone());
         let command_buffers = Renderer::create_command_buffers(
@@ -90,6 +92,7 @@ impl Renderer {
             command_buffers,
             current_image_index: 0,
             is_frame_started: false,
+            clear_color,
         }
     }
 
@@ -196,10 +199,10 @@ impl Renderer {
     }
 
     /// Begins a new render pass using the render pass of the current [`Swapchain`].
-    /// 
+    ///
     /// Before calling this, it is required that a frame has been started and the command buffer
     /// matches the command buffer being used for that frame.
-    /// 
+    ///
     /// The screen will be cleared to a light gray, and the viewport and scissor will be updated
     /// with the extent of the current [`Swapchain`]
     pub fn begin_swapchain_render_pass(&self, command_buffer: vk::CommandBuffer) {
@@ -213,11 +216,10 @@ impl Renderer {
             panic!("Failed to begin swapchain render pass, see above");
         }
 
-        // TODO: Make the clear color customizable?
         let clear_values = [
             vk::ClearValue {
                 color: vk::ClearColorValue {
-                    float32: [0.1, 0.1, 0.1, 1.0],
+                    float32: self.clear_color,
                 },
             },
             vk::ClearValue {
@@ -268,7 +270,7 @@ impl Renderer {
     }
 
     /// Ends an existing render pass of the render pass of the current [`Swapchain`].
-    /// 
+    ///
     /// Before calling this it is required that a frame has been started and the command buffer
     /// matches the command buffer being used for that frame.
     pub fn end_swapchain_render_pass(&self, command_buffer: vk::CommandBuffer) {
@@ -289,9 +291,9 @@ impl Renderer {
 
     /// Begins a new frame, returning the [`CommandBuffer`][ash::vk::CommandBuffer] that will be
     /// used to draw that frame.
-    /// 
+    ///
     /// If a frame has already been started then the [`Renderer`] will panic.
-    /// 
+    ///
     /// Acquires the next image to draw to from the current [`Swapchain`]. If the [`Swapchain`]
     /// is suboptimal or out of date, the [`Swapchain`] will be recreated and no command buffer
     /// will be returned.
@@ -331,7 +333,7 @@ impl Renderer {
     }
 
     /// Ends the frame submitting the command buffer and causing a draw to the window.
-    /// 
+    ///
     /// A frame should have already been begun prior to this function being called, if not the
     /// [`Renderer`] will panic.
     ///
