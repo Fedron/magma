@@ -1,4 +1,4 @@
-// Yoinked from Bevy
+/// Possible virtual key codes
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum KeyCode {
     /// The '1' key over the letters.
@@ -200,15 +200,20 @@ pub enum KeyCode {
     Cut,
 }
 
+/// Represents the state a key can be in
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum KeyState {
     Released,
     Pressed,
 }
 
+/// Represents an input coming from a keyboard
 #[derive(Clone, Copy, Debug)]
 pub struct KeyboardInput {
+    /// Scan code of the key, not affected by keyboard layout
     pub scancode: u32,
+    /// Virtual keycode of the key, can change depending on the keyboard layout
     pub keycode: Option<KeyCode>,
+    /// The state the key is in
     pub state: KeyState,
 }
