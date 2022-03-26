@@ -7,6 +7,13 @@ use crate::{
     renderer::{PushConstantData, Vertex},
 };
 
+/// Represents the possible shader stages, wraps [`ash::vk::ShaderStageFlags`]
+pub struct ShaderStageFlag(vk::ShaderStageFlags);
+impl ShaderStageFlag {
+    pub const VERTEX: ShaderStageFlag = ShaderStageFlag(vk::ShaderStageFlags::VERTEX);
+    pub const FRAGMENT: ShaderStageFlag = ShaderStageFlag(vk::ShaderStageFlags::FRAGMENT);
+}
+
 /// Wraps various Vulkan create infos needed to create a [`Pipeline`]
 pub struct PipelineConfigInfo {
     viewport_info: vk::PipelineViewportStateCreateInfo,
@@ -146,12 +153,15 @@ where
     ///
     /// The [`Pipeline`] will only be able to draw [`Model`]s with [`Vertex`] and [`PushConstantData`]
     /// of the same type.
+    ///
+    /// The [`PushConstantData`] will be bound to the shader stages specified by `push_bind_flag`.
     pub fn new(
         device: Rc<Device>,
         config: PipelineConfigInfo,
         render_pass: &vk::RenderPass,
         vertex_shader_file: &Path,
         fragment_shader_file: &Path,
+        push_bind_flag: ShaderStageFlag,
     ) -> Pipeline<P, V> {
         let vertex_shader_module =
             Pipeline::<P, V>::create_shader_module(&device.as_ref().device, vertex_shader_file);
@@ -184,7 +194,7 @@ where
             vec![]
         } else {
             vec![vk::PushConstantRange::builder()
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .stage_flags(push_bind_flag.0)
                 .offset(0)
                 .size(push_constant_size)
                 .build()]
@@ -261,7 +271,7 @@ where
 
     /// Creates a new [`Model`] with the same [`Vertex`] and [`PushConstantData`] as the [`Pipeline`]
     /// and will set the [`PushConstantData`] on the new [`Model`].
-    /// 
+    ///
     /// See also [`Model::new_with_push`].
     pub fn create_model_with_push(
         &mut self,
@@ -280,10 +290,10 @@ where
     }
 
     /// Creates a new Vulkan shader module from the shader file at the Path provided.
-    /// 
+    ///
     /// Will panic if a file at the [`Path`] could not be found. If the file is found
     /// but not a valid SPIR-V the function will panic.
-    /// 
+    ///
     /// The `.spv` extension is automatically added to the end of the [`Path`].
     fn create_shader_module(device: &ash::Device, shader_path: &Path) -> vk::ShaderModule {
         let mut shader_path = shader_path.to_path_buf();
