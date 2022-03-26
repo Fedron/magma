@@ -2,7 +2,7 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 
 use magma_entities::prelude::{Camera, World};
 use magma_input::prelude::InputHandler;
-use magma_render::prelude::{Pipeline, PushConstantData, RenderPipeline, Renderer, Vertex};
+use magma_render::prelude::{Pipeline, PushConstantData, RenderPipeline, Renderer, Vertex, ShaderStageFlag};
 use magma_window::prelude::Window;
 
 /// Wraps a [`World`] with [`Pipeline`]s and a [`Camera`]
@@ -44,11 +44,9 @@ pub struct App {
 }
 
 impl App {
-    /// Creates a new [`App`] with a default [`Window`] and [`Renderer`]
-    pub fn new() -> App {
-        // TODO: Allow the user to create a window using the builder so they can customize it
-        let window = Window::builder().build();
-        let renderer = Renderer::new(window.winit_window(), [1.0, 0.0, 1.0, 1.0]);
+    /// Creates a new [`App`] with a [`Window`] and sets the [`Renderer`] clear color
+    pub fn new(window: Window, clear_color: [f32; 4]) -> App {
+        let renderer = Renderer::new(window.winit_window(), clear_color);
 
         App {
             window,
@@ -71,6 +69,7 @@ impl App {
         &mut self,
         vertex_shader: &Path,
         fragment_shader: &Path,
+        push_bind_flag: ShaderStageFlag
     ) -> Pipeline<P, V>
     where
         P: PushConstantData,
@@ -78,7 +77,7 @@ impl App {
     {
         // TODO: Allow for the push constant data to be bound to user-specified shaders
         self.renderer
-            .create_pipeline::<P, V>(vertex_shader, fragment_shader)
+            .create_pipeline::<P, V>(vertex_shader, fragment_shader, push_bind_flag)
     }
 
     /// Adds a new [`AppWorld`] to the app's worlds, returns the index of the inserted [`AppWorld`]

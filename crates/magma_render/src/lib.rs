@@ -14,7 +14,7 @@ mod utils;
 
 pub mod prelude {
     pub use crate::model::Model;
-    pub use crate::pipeline::{Pipeline, PipelineConfigInfo, RenderPipeline};
+    pub use crate::pipeline::{Pipeline, PipelineConfigInfo, RenderPipeline, ShaderStageFlag};
     pub use crate::renderer::{
         Format, PushConstantData, Renderer, Vertex, VertexAttributeDescription,
         VertexBindingDescription, VertexInputRate,

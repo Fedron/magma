@@ -4,7 +4,7 @@ use winit::window::Window;
 
 use crate::{
     device::Device,
-    pipeline::{Pipeline, PipelineConfigInfo},
+    pipeline::{Pipeline, PipelineConfigInfo, ShaderStageFlag},
     swapchain::Swapchain,
 };
 
@@ -108,11 +108,12 @@ impl Renderer {
     /// the other for the fragment shader. It is expected that the [`PushConstantData`] and
     /// [`Vertex`] match your shaders, this is not checked and is up to you.
     ///
-    /// [`PushConstantData`] is only bound to the vertex shader.
+    /// [`PushConstantData`] is bound to the shader stages specified in `push_bind_flag`.
     pub fn create_pipeline<P: 'static, V: 'static>(
         &mut self,
         vertex_shader: &Path,
         fragment_shader: &Path,
+        push_bind_flag: ShaderStageFlag,
     ) -> Pipeline<P, V>
     where
         P: PushConstantData,
@@ -126,6 +127,7 @@ impl Renderer {
             &self.swapchain.render_pass,
             vertex_shader,
             fragment_shader,
+            push_bind_flag,
         )
     }
 
