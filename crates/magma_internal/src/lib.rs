@@ -1,3 +1,5 @@
+//! Bundles all the `magma` crates into one crate that re-exports all the necessary functionality
+
 pub mod app {
     pub use magma_app::prelude::*;
 }
