@@ -37,9 +37,9 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
     vk::FALSE
 }
 
-/// Checks if the Vulkan instance supports the required validation layers
+/// Checks if the Vulkan instance supports the required validation layers.
 ///
-/// Returns whether or not all required layers are supported
+/// Returns whether or not all required layers are supported.
 pub fn check_validation_layer_support(
     entry: &ash::Entry,
     required_validation_layers: &[&str],
@@ -70,9 +70,9 @@ pub fn check_validation_layer_support(
     true
 }
 
-/// Creates and sets up the Vulkan debug messenger and loader
+/// Creates and sets up the Vulkan debug messenger and loader.
 ///
-/// Returns the debug utils loader and messenger
+/// Returns the debug utils loader and messenger.
 pub fn setup_debug_utils(
     entry: &ash::Entry,
     instance: &ash::Instance,
