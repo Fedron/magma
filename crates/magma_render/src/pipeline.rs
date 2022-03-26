@@ -7,6 +7,7 @@ use crate::{
     renderer::{PushConstantData, Vertex},
 };
 
+/// Wraps various Vulkan create infos needed to create a [`Pipeline`]
 pub struct PipelineConfigInfo {
     viewport_info: vk::PipelineViewportStateCreateInfo,
     input_assembly_info: vk::PipelineInputAssemblyStateCreateInfo,
@@ -115,7 +116,9 @@ impl Default for PipelineConfigInfo {
     }
 }
 
+/// Represents a [`Pipeline`] that can draw to a surface
 pub trait RenderPipeline {
+    /// Draws all the [`Model`]s in a [`Pipeline`] to the command buffer
     fn draw(&self, command_buffer: vk::CommandBuffer);
 }
 
@@ -124,9 +127,13 @@ where
     P: PushConstantData,
     V: Vertex,
 {
+    /// Handle to the [`Device`] being used to draw
     device: Rc<Device>,
+    /// Handle to the Vulkan pipeline that can be bound to draw graphics
     pub graphics_pipeline: vk::Pipeline,
+    /// Handle to the layout of the pipeline
     pub layout: vk::PipelineLayout,
+    /// List of all the [`Model`]s that will be drawn by this [`Pipeline`]
     models: Vec<Rc<RefCell<Model<P, V>>>>,
 }
 
@@ -135,6 +142,10 @@ where
     P: PushConstantData,
     V: Vertex,
 {
+    /// Creates a new [`Pipeline`].
+    ///
+    /// The [`Pipeline`] will only be able to draw [`Model`]s with [`Vertex`] and [`PushConstantData`]
+    /// of the same type.
     pub fn new(
         device: Rc<Device>,
         config: PipelineConfigInfo,
@@ -231,6 +242,9 @@ where
         }
     }
 
+    /// Creates a new [`Model`] with the same [`Vertex`] and [`PushConstantData`] as the [`Pipeline`].
+    ///
+    /// The [`PushConstantData`] on the new [`Model`] will be set to None. See also [`Model::new`]
     pub fn create_model(
         &mut self,
         vertices: Vec<V>,
@@ -245,6 +259,32 @@ where
         model
     }
 
+    /// Creates a new [`Model`] with the same [`Vertex`] and [`PushConstantData`] as the [`Pipeline`]
+    /// and will set the [`PushConstantData`] on the new [`Model`].
+    /// 
+    /// See also [`Model::new_with_push`].
+    pub fn create_model_with_push(
+        &mut self,
+        vertices: Vec<V>,
+        indices: Vec<u32>,
+        push_constants: P,
+    ) -> Rc<RefCell<Model<P, V>>> {
+        let model = Rc::new(RefCell::new(Model::new_with_push(
+            self.device.clone(),
+            vertices,
+            indices,
+            push_constants,
+        )));
+        self.models.push(model.clone());
+        model
+    }
+
+    /// Creates a new Vulkan shader module from the shader file at the Path provided.
+    /// 
+    /// Will panic if a file at the [`Path`] could not be found. If the file is found
+    /// but not a valid SPIR-V the function will panic.
+    /// 
+    /// The `.spv` extension is automatically added to the end of the [`Path`].
     fn create_shader_module(device: &ash::Device, shader_path: &Path) -> vk::ShaderModule {
         let mut shader_path = shader_path.to_path_buf();
         shader_path.set_extension(format!(
@@ -271,6 +311,7 @@ where
     P: PushConstantData,
     V: Vertex,
 {
+    /// Draws al the [`Model`]s in the [`Pipeline`] to the command buffer
     fn draw(&self, command_buffer: vk::CommandBuffer) {
         unsafe {
             self.device.device.cmd_bind_pipeline(

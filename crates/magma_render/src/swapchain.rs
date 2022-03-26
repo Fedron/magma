@@ -14,7 +14,7 @@ struct VulkanSwapchain {
 }
 
 pub struct Swapchain {
-    /// Handle to the logical device that this swapchain belongs to
+    /// Handle to the [`Device`] this [`Swapchain`] belongs to
     device: Rc<Device>,
 
     /// Manages the underlying Vulkan swapchain
@@ -63,12 +63,11 @@ pub struct Swapchain {
     current_frame: usize,
 }
 
-/// Constructors to create a swapchain
 impl Swapchain {
-    /// Creates a new swapchain
+    /// Creates a new [`Swapchain`]
     ///
     /// Under the hood a new Vulkan swapchain is created as well the framebuffers, images, semaphores, and fences
-    /// required to make the swapchain work
+    /// required to make the [`Swapchain`] work.
     pub fn new(device: Rc<Device>) -> Swapchain {
         let family_indices = Device::find_queue_family(
             &device.instance,
@@ -141,8 +140,9 @@ impl Swapchain {
         }
     }
 
-    /// Creates a new swapchain, much the same as new(), with the exception that is used a previous Vulkan swapchain
-    /// to create the new swapchain from
+    /// Creates a new [`Swapchain`] re-using the old swapchain.
+    /// 
+    /// See also [`Swapchain::new`]
     pub fn from_old_swapchain(
         device: Rc<Device>,
         previous_swapchain: vk::SwapchainKHR,
@@ -218,9 +218,7 @@ impl Swapchain {
         }
     }
 
-    /// Helper constructor to create a new Vulkan swapchain
-    ///
-    /// Returns a struct with the swapchain loader, created swapchain, images, format, and extent
+    /// Creates a new [`VulkanSwapchain`]
     fn create_swapchain(
         instance: &ash::Instance,
         device: &ash::Device,
@@ -298,7 +296,7 @@ impl Swapchain {
         }
     }
 
-    /// Chooses the most optimal format for the application
+    /// Chooses the most optimal format for the [`Swapchain`]
     fn choose_swapchain_format(
         available_formats: &Vec<vk::SurfaceFormatKHR>,
     ) -> vk::SurfaceFormatKHR {
@@ -313,7 +311,7 @@ impl Swapchain {
         available_formats.first().unwrap().clone()
     }
 
-    /// Chooses the most optimal present mode for the application
+    /// Chooses the most optimal present mode for the [`Swapchain`]
     fn choose_swapchain_present_mode(
         available_present_modes: &Vec<vk::PresentModeKHR>,
     ) -> vk::PresentModeKHR {
@@ -324,7 +322,7 @@ impl Swapchain {
         }
     }
 
-    /// Chooses the most optimal extent for the application
+    /// Chooses the most optimal extent for the [`Swapchain`]
     fn choose_swapchain_extent(capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
         if capabilities.current_extent.width != std::u32::MAX {
             capabilities.current_extent
@@ -342,7 +340,7 @@ impl Swapchain {
         }
     }
 
-    /// Helper constructor to create an image view for every image in the swapchain
+    /// Creates a Vulkan [`ImageView`][ash::vk::ImageView] for every framebuffer in the [`Swapchain`]
     fn create_image_views(
         device: &ash::Device,
         surface_format: vk::Format,
@@ -378,10 +376,9 @@ impl Swapchain {
         image_views
     }
 
-    /// Helper constructor to create depth stencil resources for every image in the swapchain.
-    /// Takes in the number of images to create, and the extent the images should have
-    ///
-    /// Returns the depth images, image memory, and the image view as a tuple
+    /// Creates a depth stencil image, image view and memory for every framebuffer in the [`Swapchain`].
+    /// 
+    /// Returns the images, device memory, and image views.
     fn create_depth_resources(
         device: &Device,
         count: usize,
@@ -437,7 +434,7 @@ impl Swapchain {
         (depth_images, depth_image_memories, depth_image_views)
     }
 
-    /// Helper constructor that creates a new render pass
+    /// Creates a new render pass with a colour and depth attachment for the [`Swapchain`]
     fn create_render_pass(device: &Device, surface_format: vk::Format) -> vk::RenderPass {
         let color_attachment = vk::AttachmentDescription::builder()
             .format(surface_format)
@@ -516,7 +513,7 @@ impl Swapchain {
         )
     }
 
-    /// Helper constructor that creates a new framebuffer for every image in the swapchain
+    /// Creates a framebuffer for every image in the [`Swapchain`]
     fn create_framebuffers(
         device: &ash::Device,
         render_pass: vk::RenderPass,
@@ -545,7 +542,7 @@ impl Swapchain {
         framebuffers
     }
 
-    /// Helper constructor that creates the required semaphores and fences for synchronization between the CPU and GPU
+    /// Creates semaphores and fences to manage synchronization between the CPU and GPU for every framebuffer
     fn create_sync_objects(
         device: &ash::Device,
         image_count: usize,
@@ -588,11 +585,10 @@ impl Swapchain {
     }
 }
 
-/// Public functions
 impl Swapchain {
-    /// Acquires the next available framebuffer that can be drawn
+    /// Acquires the next available framebuffer that can be drawn to
     ///
-    /// Returns the index of the framebuffer that was acquired, and whether the swapchain is suboptimal for the surface
+    /// Returns the index of the framebuffer that was acquired, and whether the [`Swapchain`] is suboptimal for the surface
     pub fn acquire_next_image(&self) -> Result<(u32, bool), vk::Result> {
         // Wait for previous frame to finish drawing (blocking wait)
         let wait_fences = [self.in_flight_fences[self.current_frame]];
@@ -614,7 +610,7 @@ impl Swapchain {
 
     /// Submits a draw command buffer to the framebuffer at index, and presents it to the surface
     ///
-    /// Returns whether the swapchain is suboptimal for the surface, and a vk::Result which contains an Vulkan specific error
+    /// Returns whether the [`Swapchain`] is suboptimal for the surface, and a vk::Result which contains an Vulkan specific error
     pub fn submit_command_buffers(
         &mut self,
         command_buffer: vk::CommandBuffer,
@@ -679,7 +675,7 @@ impl Swapchain {
         result
     }
 
-    /// Returns the aspect ratio of the swapchain extent
+    /// Returns the aspect ratio of the [`Swapchain`] extent
     pub fn extent_aspect_ratio(&self) -> f32 {
         self.extent.width as f32 / self.extent.height as f32
     }

@@ -23,7 +23,7 @@ impl std::fmt::Display for PhysicalDeviceInfo {
     }
 }
 
-/// Wrapper struct with all the queue families required for the app
+/// Wraps all the required queues for the [`Device`]
 pub struct QueueFamilyIndices {
     /// Index of the graphics queue family
     pub graphics_family: Option<u32>,
@@ -38,7 +38,7 @@ impl QueueFamilyIndices {
     }
 }
 
-/// Contains information on the features and properties of a swapchain
+/// Contains information on the features and properties of a Vulkan swapchain
 pub struct SwapchainSupportInfo {
     /// Various properties of the swapchain
     ///
@@ -54,7 +54,7 @@ pub struct SwapchainSupportInfo {
     pub present_modes: Vec<vk::PresentModeKHR>,
 }
 
-/// Wraps vk::BufferUsageFlags with the specific flags that the application supports
+/// Wraps [`BufferUsageFlags`][ash::vk::BufferUsageFlags] with the specific flags that [`Device`] supports
 #[derive(PartialEq)]
 pub struct BufferUsage(vk::BufferUsageFlags);
 impl BufferUsage {
@@ -62,7 +62,7 @@ impl BufferUsage {
     pub const INDICES: BufferUsage = BufferUsage(vk::BufferUsageFlags::INDEX_BUFFER);
 }
 
-/// Wraps the Vulkan steps to create a logical device
+/// Represents a Vulkan logical device that can be used to send commands to the GPU
 pub struct Device {
     /// Holds the loaded Vulkan library
     _entry: ash::Entry,
@@ -105,9 +105,11 @@ pub struct Device {
     pub command_pool: vk::CommandPool,
 }
 
-/// Constructors to create a device
 impl Device {
-    /// Creates a new Vulkan instance and logical device
+    /// Creates a new [`Device`]
+    /// 
+    /// Loads the Vulkan library, and creates a Vulkan instance and device. If the crate is being
+    /// built with debug assertions enabled, a Vulkan debugger messenger wil also be created.
     pub fn new(window: &winit::window::Window) -> Device {
         let entry = unsafe { ash::Entry::load().expect("Failed to load Vulkan library") };
         let instance = Device::create_instance(&entry);
@@ -146,7 +148,7 @@ impl Device {
         }
     }
 
-    /// Helper constructor to create a Vulkan instance from a loaded Vulkan library
+    /// Creates a new Vulkan instance from a loaded Vulkan library
     fn create_instance(entry: &ash::Entry) -> ash::Instance {
         let required_extension_names = required_extension_names();
         if !Device::check_required_extensions(entry, &required_extension_names) {
@@ -184,9 +186,9 @@ impl Device {
         }
     }
 
-    /// Checks if the Vulkan instance supports all the extensions we require
-    ///
-    /// Returns whether or not all required extensions are supported
+    /// Checks whether the loaded Vulkan library supports the required instance extensions.
+    /// 
+    /// If not all of the extensions are supported, false will be returned.
     fn check_required_extensions(
         entry: &ash::Entry,
         required_extension_names: &Vec<*const i8>,
@@ -217,9 +219,9 @@ impl Device {
         true
     }
 
-    /// Helper constructor to create a platform-specific Vulkan surface
-    ///
-    /// Returns the surface loader and a handle to the created surface
+    /// Creates a platform-specific Vulkan surface for an instance.
+    /// 
+    /// Returns the a surface loader, and the platform-specific surface.
     fn create_surface(
         entry: &ash::Entry,
         instance: &ash::Instance,
@@ -234,7 +236,8 @@ impl Device {
         )
     }
 
-    /// Helper constructor that finds a Vulkan physical device that matches the needs of the application, and returns it
+    /// Tries to find a suitable GPU that can be used to create a [`Device`].
+    /// If no suitable GPU is found this function will panic.
     fn pick_physical_device(
         instance: &ash::Instance,
         surface_loader: &ash::extensions::khr::Surface,
@@ -273,9 +276,9 @@ impl Device {
         }
     }
 
-    /// Checks a physical device for required features
-    ///
-    /// Returns whether or not the physical device is suitable
+    /// Check whether the provided device has all the queues and extensions required.
+    /// 
+    /// If extensions are missing from the device, this function call will panic.
     fn is_physical_device_suitable(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
@@ -316,7 +319,7 @@ impl Device {
         }
     }
 
-    /// Gets a physical device's queue families
+    /// Tries to get all the queue families in [`QueueFamilyIndices`] from the physical device
     pub fn find_queue_family(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
@@ -357,9 +360,9 @@ impl Device {
         queue_family_indices
     }
 
-    /// Checks if the physical device supports the required extensions
-    ///
-    /// Returns whether or not all required extensions are supported
+    /// Checks if the physical device supports the required extensions.
+    /// 
+    /// If there are extensions that are missing from device that we require, this function will panic.
     fn check_device_extension_support(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
@@ -392,7 +395,7 @@ impl Device {
         true
     }
 
-    /// Gets the swapchain support info for a surface on a physical device
+    /// Gets the swapchain support info for a surface on a physical device.
     pub fn query_swapchain_support(
         physical_device: vk::PhysicalDevice,
         surface_loader: &ash::extensions::khr::Surface,
@@ -419,9 +422,9 @@ impl Device {
         }
     }
 
-    /// Helper constructor that creates a logical device from a physical device
-    ///
-    /// Returns a handle to the created logical device, and it's queue families
+    /// Creates a new Vulkan logical device.
+    /// 
+    /// Returns the created device, and the [`QueueFamilyIndices`].
     fn create_logical_device(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
@@ -484,7 +487,7 @@ impl Device {
         (device, indices)
     }
 
-    /// Helper constructor that creates a Vulkan command pool
+    /// Creates a new command pool for the logical device
     fn create_command_pool(
         device: &ash::Device,
         queue_family: &QueueFamilyIndices,
@@ -505,9 +508,9 @@ impl Device {
 }
 
 impl Device {
-    /// Uploads data to a buffer on the GPU through the use of a staging buffer on the CPU
-    ///
-    /// Returns the buffer and device memory on the GPU
+    /// Uploads data onto the GPU through the use of a staging buffer.
+    /// 
+    /// Returns the created buffer and memory on the GPU.
     pub fn upload_buffer_with_staging<T>(
         &self,
         data: &Vec<T>,
@@ -557,9 +560,7 @@ impl Device {
         (buffer, buffer_memory)
     }
 
-    /// Helper function to create a new buffer on the GPU
-    ///
-    /// Returns the buffer that was created, and the device memory allocated to it
+    /// Creates a new buffer
     pub fn create_buffer(
         &self,
         size: vk::DeviceSize,
@@ -602,7 +603,7 @@ impl Device {
         (buffer, buffer_memory)
     }
 
-    /// Copies the content of one buffer to another through the use of a staging buffer
+    /// Copies the content of one buffer to another
     pub fn copy_buffer(
         &self,
         src_buffer: vk::Buffer,
@@ -661,8 +662,8 @@ impl Device {
         };
     }
 
-    /// Finds a suitable memory type for device memory give a set of required properties and the ones supported by the
-    /// physical device
+    /// Finds a suitable memory type for device memory given a set of required properties
+    /// and the ones supported by the physical device
     fn find_memory_type(
         &self,
         type_filter: u32,
@@ -684,9 +685,9 @@ impl Device {
         panic!("Failed to find a suitable memory type")
     }
 
-    /// Finds whether the candidate formats are supported by the physical device using the specified tiling mode
+    /// Finds whether the candidate formats are supported by the physical device using the specified tiling mode.
     ///
-    /// Returns the first candidate that is supported
+    /// Returns the first candidate that is supported.
     pub fn find_supported_format(
         &self,
         candidates: &[vk::Format],

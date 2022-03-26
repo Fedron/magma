@@ -22,7 +22,7 @@ pub fn char_ptr_to_string(string_ptr: *const i8) -> String {
 
 /// Checks whether a vector contains all of the required vector
 ///
-/// Returns whether to_check contains all of required, and a vector of the missing items
+/// Returns whether `to_check` contains all of required, and a vector of the missing items
 pub fn contains_required(to_check: &Vec<String>, required: &Vec<String>) -> (bool, Vec<String>) {
     let required_hash_set = HashSet::<String>::from_iter(required.clone());
     let to_check_hash_set = &HashSet::<String>::from_iter(to_check.clone());

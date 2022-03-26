@@ -6,7 +6,8 @@ use crate::{
     renderer::{PushConstantData, Vertex},
 };
 
-/// Represents a collection of vertices that can be drawn to the window
+/// Represents a collection of [`Vertex`] that can be drawn using a [`RenderPipeline`]
+/// of the same [`Vertex`] and [`PushConstantData`] types.
 pub struct Model<P, V>
 where
     P: PushConstantData,
@@ -22,7 +23,7 @@ where
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDeviceMemory.html
     vertex_buffer_memory: vk::DeviceMemory,
-    /// Total number of vertices the model consists of
+    /// Total number of vertices the [`Model`] consists of
     vertex_count: usize,
     /// Handle to the Vulkan buffer holding the indices data
     ///
@@ -32,6 +33,9 @@ where
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDeviceMemory.html
     indices_buffer_memory: vk::DeviceMemory,
+    /// Contains the [`PushConstantData`] to push when the [`Model`] is drawn.
+    ///
+    /// Should be set before the [`Model::draw`] is called.
     push_constants: Option<P>,
     vertex_phantom: PhantomData<V>,
 }
@@ -41,7 +45,11 @@ where
     P: PushConstantData,
     V: Vertex,
 {
-    /// Creates new vertex buffers for the model on the GPU from the provided vertices
+    /// Creates a new [`Model`].
+    ///
+    /// Assigns the vertices and indices to new dedicated buffers on the GPU.
+    /// The [`PushConstantData`] is set to `None` and should be set before a call to
+    /// [`Model::draw`].
     pub fn new(device: Rc<Device>, vertices: Vec<V>, indices: Vec<u32>) -> Model<P, V> {
         let vertex_count = indices.len();
         if vertex_count < 3 {
@@ -67,12 +75,35 @@ where
         }
     }
 
+    /// Creates a new [`Model`] with the [`PushConstantData`].
+    ///
+    /// Assigns the vertices and indices to new dedicated buffers on the GPU.
+    pub fn new_with_push(
+        device: Rc<Device>,
+        vertices: Vec<V>,
+        indices: Vec<u32>,
+        push_constants: P,
+    ) -> Model<P, V> {
+        let mut model = Model::new(device.clone(), vertices, indices);
+        model.set_push_constants(push_constants);
+        model
+    }
+
+    /// Sets the [`PushConstantData`] on the [`Model`]
     pub fn set_push_constants(&mut self, push_constants: P) {
         self.push_constants = Some(push_constants);
     }
 
-    /// Draws the model vertices to the command buffer
+    /// Draws the [`Model`].
+    /// 
+    /// If the [`PushConstantData`] wasn't set prior to this function being called, the
+    /// [`Model`] won't be drawn.
     pub fn draw(&self, command_buffer: vk::CommandBuffer, layout: vk::PipelineLayout) {
+        if self.push_constants.is_none() {
+            log::warn!("You haven't set push constant data so the model won't be drawn");
+            return;
+        }
+
         // Bind
         let buffers = [self.vertex_buffer];
         let offsets = [0];

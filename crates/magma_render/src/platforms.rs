@@ -5,7 +5,7 @@ use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
 use ash::vk;
 
-/// Gets the required extensions te create a Vulkan instance on Windows
+/// Gets the required extensions to create a Vulkan instance on Windows
 #[cfg(all(windows))]
 pub fn required_extension_names() -> Vec<*const i8> {
     vec![

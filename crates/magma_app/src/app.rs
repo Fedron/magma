@@ -64,16 +64,9 @@ impl App {
         self.renderer.aspect_ratio()
     }
 
-    /// Creates a new [`RenderPipeline`]
+    /// Creates a new [`RenderPipeline`].
     ///
-    /// The created [`Pipeline`] will create a layout with the [`PushConstantData`] provided
-    /// and bind the [`Vertex`] attributes in the pipeline.
-    ///
-    /// The [`Pipeline`] will create two Vulkan shader modules, one for your vertex shader and
-    /// the other for the fragment shader. It is expected that the [`PushConstantData`] and
-    /// [`Vertex`] match your shaders, this is not checked and is up to you.
-    ///
-    /// [`PushConstantData`] is only bound to the vertex shader.
+    /// See also [`Renderer::create_pipeline`]
     pub fn create_render_pipeline<P: 'static, V: 'static>(
         &mut self,
         vertex_shader: &Path,
