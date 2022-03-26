@@ -1,3 +1,5 @@
+//! This crate wraps [`winit`] to make it easier to create windows
+
 mod window;
 mod events;
 

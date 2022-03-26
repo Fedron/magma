@@ -1,6 +1,7 @@
 use magma_input::prelude::{KeyCode, KeyState, KeyboardInput};
 use winit::event::{ElementState, KeyboardInput as WinitKeyboardInput, VirtualKeyCode};
 
+/// Converts from a [`winit::event::VirtualKeyCode`] to a [`magma_input::prelude::KeyCode`]
 pub fn convert_winit_keyboard_to_magma(input: WinitKeyboardInput) -> KeyboardInput {
     KeyboardInput {
         scancode: input.scancode,

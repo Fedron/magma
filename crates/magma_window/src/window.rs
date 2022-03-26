@@ -10,7 +10,7 @@ use winit::{
 
 use crate::events::convert_winit_keyboard_to_magma;
 
-/// Allows you to configure settings for the [_window] prior to creating
+/// Allows you to configure settings for a [`Window`] prior to creating it
 pub struct WindowBuilder {
     width: u32,
     height: u32,
@@ -18,9 +18,12 @@ pub struct WindowBuilder {
 }
 
 impl WindowBuilder {
-    /// Creates a new [WindowBuilder] with default configuration.
+    /// Creates a new [WindowBuilder] with a default configuration.
     ///
-    /// The default
+    /// The default configuration is:
+    /// - Width: 1280
+    /// - Height: 720
+    /// - Title: Magma App
     pub fn new() -> WindowBuilder {
         WindowBuilder {
             width: 1280,
@@ -44,7 +47,7 @@ impl WindowBuilder {
         self
     }
 
-    /// Creates a new app from the configuration provided in the builder
+    /// Creates a new [`Window`] from the config provided by the [`WindowBuilder`]
     pub fn build(self) -> Window {
         let (window, event_loop) = Window::new_winit(self.width, self.height, self.title);
 
@@ -55,6 +58,7 @@ impl WindowBuilder {
     }
 }
 
+/// Wraps a [`winit::window::Window`] and [`winit::event_loop::EventLoop`]
 pub struct Window {
     window: Rc<WinitWindow>,
     event_loop: EventLoop<()>,
@@ -66,13 +70,14 @@ impl Window {
         WindowBuilder::new()
     }
 
+    /// Gets the underlying [`winit::window::Window`]
     pub fn winit_window(&self) -> Rc<WinitWindow> {
         self.window.clone()
     }
 
-    /// Initialises a winit _window and event loop
+    /// Creates a new [`winit::window::Window`] and [`winit::event_loop::EventLoop`]
     ///
-    /// Returns the _window, and the event loop used by the window
+    /// Returns the window and event loop
     pub fn new_winit(width: u32, height: u32, title: &'static str) -> (WinitWindow, EventLoop<()>) {
         let event_loop = EventLoop::new();
         let window = WinitWindowBuilder::new()
@@ -84,7 +89,7 @@ impl Window {
         (window, event_loop)
     }
 
-    /// Runs the winit event loop
+    /// Runs the winit event loop, once all winit events are cleared the `main_loop` is run
     ///
     /// Blocking operation but returns once the event loop is quit.
     pub fn run_event_loop<F>(mut self, input_handler: Rc<RefCell<InputHandler>>, mut main_loop: F)
