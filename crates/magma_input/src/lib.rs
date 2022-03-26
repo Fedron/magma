@@ -1,3 +1,5 @@
+//! This crate provides a single input handler that manages various form of inputs
+
 mod keyboard;
 mod handler;
 
