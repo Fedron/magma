@@ -1,5 +1,11 @@
 use crate::prelude::Entity;
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::atomic::{AtomicU32, Ordering},
+};
+
+const WORLD_ID: AtomicU32 = AtomicU32::new(0);
 
 /// Contains a collection of [`Entity`]s and handles updating and drawing them
 pub struct World {
@@ -12,9 +18,8 @@ pub struct World {
 impl World {
     /// Creates a new [`World`] with no entities and a unique id
     pub fn new() -> World {
-        // TODO: Create a unique id
         World {
-            id: 0,
+            id: WORLD_ID.fetch_add(1, Ordering::Relaxed),
             entities: Vec::new(),
         }
     }
