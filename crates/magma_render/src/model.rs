@@ -1,10 +1,28 @@
 use ash::vk;
-use std::{marker::PhantomData, rc::Rc};
+use magma_derive::Vertex;
+use memoffset::offset_of;
+use std::{marker::PhantomData, path::Path, rc::Rc};
 
 use crate::{
     device::{BufferUsage, Device},
-    renderer::{PushConstantData, Vertex},
+    renderer::{
+        Format, PushConstantData, Vertex, VertexAttributeDescription, VertexBindingDescription,
+        VertexInputRate,
+    },
 };
+
+#[repr(C)]
+#[derive(Vertex)]
+pub struct OBJVertex {
+    #[location = 0]
+    pub position: [f32; 3],
+    #[location = 1]
+    pub color: [f32; 3],
+    #[location = 2]
+    pub normal: [f32; 2],
+    #[location = 3]
+    pub uv: [f32; 2],
+}
 
 /// Represents a collection of [`Vertex`] that can be drawn using a [`RenderPipeline`]
 /// of the same [`Vertex`] and [`PushConstantData`] types.
@@ -89,13 +107,43 @@ where
         model
     }
 
+    /// Creates a new [`Model`] from an `.obj` file.
+    ///
+    /// If the `.obj` file contains multiple models, the first model loaded is the one that is created in `magma`.
+    pub fn new_from_file(device: Rc<Device>, file: &Path) -> Model<P, OBJVertex> {
+        let (models, _) =
+            tobj::load_obj(file, &tobj::LoadOptions::default()).expect("Failed to load OBJ file");
+        let mesh = &models
+            .first()
+            .expect("Failed to get first loaded models")
+            .mesh;
+
+        // Construct the vertices vector
+        let mut vertices: Vec<OBJVertex> = Vec::new();
+        for vertex in 0..mesh.positions.len() / 3 {
+            // TODO: Check for the presence of vertex color, normal and uv. If they are defined, use them
+            vertices.push(OBJVertex {
+                position: [
+                    mesh.positions[3 * vertex],
+                    mesh.positions[3 * vertex + 1],
+                    mesh.positions[3 * vertex + 2],
+                ],
+                color: [1.0, 1.0, 1.0],
+                normal: [0.0, 0.0],
+                uv: [0.0, 0.0],
+            });
+        }
+
+        Model::<P, OBJVertex>::new(device.clone(), vertices, mesh.indices.clone())
+    }
+
     /// Sets the [`PushConstantData`] on the [`Model`]
     pub fn set_push_constants(&mut self, push_constants: P) {
         self.push_constants = Some(push_constants);
     }
 
     /// Draws the [`Model`].
-    /// 
+    ///
     /// If the [`PushConstantData`] wasn't set prior to this function being called, the
     /// [`Model`] won't be drawn.
     pub fn draw(&self, command_buffer: vk::CommandBuffer, layout: vk::PipelineLayout) {

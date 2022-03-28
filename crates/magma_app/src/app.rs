@@ -2,7 +2,9 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 
 use magma_entities::prelude::{Camera, World};
 use magma_input::prelude::InputHandler;
-use magma_render::prelude::{Pipeline, PushConstantData, RenderPipeline, Renderer, Vertex, ShaderStageFlag};
+use magma_render::prelude::{
+    Pipeline, PushConstantData, RenderPipeline, Renderer, ShaderStageFlag, Vertex, Device,
+};
 use magma_window::prelude::Window;
 
 /// Wraps a [`World`] with [`Pipeline`]s and a [`Camera`]
@@ -62,6 +64,11 @@ impl App {
         self.renderer.aspect_ratio()
     }
 
+    /// Gets the [`Device`] being used by the [`Renderer`]
+    pub fn device(&self) -> Rc<Device> {
+        self.renderer.device()
+    }
+
     /// Creates a new [`RenderPipeline`].
     ///
     /// See also [`Renderer::create_pipeline`]
@@ -69,7 +76,7 @@ impl App {
         &mut self,
         vertex_shader: &Path,
         fragment_shader: &Path,
-        push_bind_flag: ShaderStageFlag
+        push_bind_flag: ShaderStageFlag,
     ) -> Pipeline<P, V>
     where
         P: PushConstantData,

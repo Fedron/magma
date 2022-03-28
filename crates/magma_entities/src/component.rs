@@ -67,7 +67,7 @@ impl Camera {
     }
 
     /// Creates a new orthographic projection matrix.
-    /// 
+    ///
     /// Uses a right-handed coordinate system.
     pub fn set_orthographic(
         &mut self,
@@ -82,7 +82,7 @@ impl Camera {
     }
 
     /// Creates a new perspective projection matrix.
-    /// 
+    ///
     /// Uses a right-handed coordinate system.
     pub fn set_perspective(&mut self, fovy: f32, aspect: f32, near: f32, far: f32) {
         self.projection_matrix = glam::Mat4::perspective_rh(fovy, aspect, near, far);
@@ -90,6 +90,6 @@ impl Camera {
 
     /// Creates a new right-handed view matrix.
     pub fn look_at(&mut self, position: glam::Vec3, target: glam::Vec3) {
-        self.view_matrix = glam::Mat4::look_at_rh(position, target, glam::Vec3::Y);
+        self.view_matrix = glam::Mat4::look_at_rh(position, target, glam::vec3(0.0, -1.0, 0.0));
     }
 }

@@ -3,7 +3,7 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Vertex)]
-pub struct SimpleVertex {
+pub struct CubeVertex {
     #[location = 0]
     pub position: [f32; 3],
     #[location = 1]
@@ -11,13 +11,13 @@ pub struct SimpleVertex {
 }
 
 #[derive(PushConstantData)]
-pub struct SimplePushConstantData {
+pub struct CubePushConstantData {
     _transform: Mat4,
 }
 
 pub struct Cube {
     pub transform: Transform,
-    pub model: Rc<RefCell<Model<SimplePushConstantData, SimpleVertex>>>,
+    pub model: Rc<RefCell<Model<CubePushConstantData, CubeVertex>>>,
 }
 
 impl Entity for Cube {
@@ -48,7 +48,7 @@ impl Entity for CameraController {
 
         cube.model
             .borrow_mut()
-            .set_push_constants(SimplePushConstantData {
+            .set_push_constants(CubePushConstantData {
                 _transform: self.camera.projection_matrix()
                     * self.camera.view_matrix()
                     * cube.transform.as_matrix(),
@@ -68,49 +68,49 @@ fn main() -> anyhow::Result<()> {
     );
     let mut cube_world = World::new();
 
-    let mut simple_pipeline = app.create_render_pipeline::<SimplePushConstantData, SimpleVertex>(
+    let mut cube_pipeline = app.create_render_pipeline::<CubePushConstantData, CubeVertex>(
         &Path::new("shaders/cube.vert"),
         &Path::new("shaders/cube.frag"),
         ShaderStageFlag::VERTEX,
     );
-    let cube = simple_pipeline.create_model(
+    let cube = cube_pipeline.create_model(
         vec![
-            SimpleVertex {
+            CubeVertex {
                 // Bottom-back-left 0
                 position: [-0.5, 0.5, -0.5],
                 color: [1.0, 0.0, 0.0],
             },
-            SimpleVertex {
+            CubeVertex {
                 // Bottom-back-right 1
                 position: [0.5, 0.5, -0.5],
                 color: [0.0, 1.0, 0.0],
             },
-            SimpleVertex {
+            CubeVertex {
                 // Bottom-front-right 2
                 position: [0.5, 0.5, 0.5],
                 color: [0.0, 0.0, 1.0],
             },
-            SimpleVertex {
+            CubeVertex {
                 // Bottom-front-left 3
                 position: [-0.5, 0.5, 0.5],
                 color: [1.0, 1.0, 0.0],
             },
-            SimpleVertex {
+            CubeVertex {
                 // Top-back-left 4
                 position: [-0.5, -0.5, -0.5],
                 color: [0.0, 1.0, 1.0],
             },
-            SimpleVertex {
+            CubeVertex {
                 // Top-back-right 5
                 position: [0.5, -0.5, -0.5],
                 color: [1.0, 0.0, 1.0],
             },
-            SimpleVertex {
+            CubeVertex {
                 // Top-front-right 6
                 position: [0.5, -0.5, 0.5],
                 color: [0.0, 0.0, 0.0],
             },
-            SimpleVertex {
+            CubeVertex {
                 // Top-front-left 7
                 position: [-0.5, -0.5, 0.5],
                 color: [1.0, 1.0, 1.0],
@@ -146,7 +146,7 @@ fn main() -> anyhow::Result<()> {
 
     let cube_app_world = app.add_world(AppWorld::new(cube_world, camera));
     app.set_active_world(cube_app_world);
-    app.add_render_pipeline(cube_app_world, simple_pipeline);
+    app.add_render_pipeline(cube_app_world, cube_pipeline);
     app.run();
 
     Ok(())
