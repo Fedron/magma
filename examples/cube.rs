@@ -64,7 +64,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut app = App::new(
         WindowBuilder::new().title("Cube").build(),
-        [0.1, 0.1, 0.1, 1.0],
+        [0.01, 0.01, 0.01, 1.0],
     );
     let mut cube_world = World::new();
 
