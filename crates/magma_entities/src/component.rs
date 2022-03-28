@@ -38,6 +38,36 @@ impl Transform {
             self.position,
         )
     }
+
+    /// Converts the `rotation` and `scale` into a normal matrix that
+    /// can be used in shaders with lighting requiring non-uniform scaling.
+    pub fn as_normal_matrix(&self) -> glam::Mat3 {
+        let c3 = self.rotation.z.to_radians().cos();
+        let s3 = self.rotation.z.to_radians().sin();
+        let c2 = self.rotation.x.to_radians().cos();
+        let s2 = self.rotation.x.to_radians().sin();
+        let c1 = self.rotation.y.to_radians().cos();
+        let s1 = self.rotation.y.to_radians().sin();
+        let inverse_scale = 1.0 / self.scale;
+
+        glam::mat3(
+            glam::vec3(
+                inverse_scale.x * (c1 * c3 + s1 * s2 * s3),
+                inverse_scale.x * (c2 * s3),
+                inverse_scale.x * (c1 * s2 * s3 - c3 * s1),
+            ),
+            glam::vec3(
+                inverse_scale.y * (c3 * s1 * s2 - c1 * s3),
+                inverse_scale.y * (c2 * c3),
+                inverse_scale.y * (c1 * c3 * s2 + s1 * s3),
+            ),
+            glam::vec3(
+                inverse_scale.z * (c2 * s1),
+                inverse_scale.z * (-s2),
+                inverse_scale.z * (c1 * c2),
+            ),
+        )
+    }
 }
 
 /// Represents a projection and view matrix

@@ -19,7 +19,7 @@ pub struct OBJVertex {
     #[location = 1]
     pub color: [f32; 3],
     #[location = 2]
-    pub normal: [f32; 2],
+    pub normal: [f32; 3],
     #[location = 3]
     pub uv: [f32; 2],
 }
@@ -121,15 +121,35 @@ where
         // Construct the vertices vector
         let mut vertices: Vec<OBJVertex> = Vec::new();
         for vertex in 0..mesh.positions.len() / 3 {
-            // TODO: Check for the presence of vertex color, normal and uv. If they are defined, use them
+            let position = [
+                mesh.positions[3 * vertex],
+                mesh.positions[3 * vertex + 1],
+                mesh.positions[3 * vertex + 2],
+            ];
+
+            let mut color = [1.0_f32, 1.0_f32, 1.0_f32];
+            if !mesh.vertex_color.is_empty() {
+                color = [
+                    mesh.vertex_color[3 * vertex],
+                    mesh.vertex_color[3 * vertex + 1],
+                    mesh.vertex_color[3 * vertex + 2],
+                ];
+            }
+
+            let mut normal = [0.0_f32, 1.0_f32, 0.0_f32];
+            if !mesh.normals.is_empty() {
+                normal = [
+                    mesh.normals[3 * vertex],
+                    mesh.normals[3 * vertex + 1],
+                    mesh.normals[3 * vertex + 2],
+                ];
+            }
+
+            // TODO: Read texture coords
             vertices.push(OBJVertex {
-                position: [
-                    mesh.positions[3 * vertex],
-                    mesh.positions[3 * vertex + 1],
-                    mesh.positions[3 * vertex + 2],
-                ],
-                color: [1.0, 1.0, 1.0],
-                normal: [0.0, 0.0],
+                position,
+                color,
+                normal,
                 uv: [0.0, 0.0],
             });
         }

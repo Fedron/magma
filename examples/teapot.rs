@@ -4,6 +4,7 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 #[derive(PushConstantData)]
 pub struct TeapotPushConstantData {
     _transform: Mat4,
+    _normal: Mat4,
 }
 
 pub struct Teapot {
@@ -44,6 +45,7 @@ impl Entity for CameraController {
                 _transform: self.camera.projection_matrix()
                     * self.camera.view_matrix()
                     * teapot.transform.as_matrix(),
+                _normal: Mat4::from_mat3(self.transform.as_normal_matrix()),
             });
     }
 }
@@ -56,7 +58,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut app = App::new(
         WindowBuilder::new().title("Teapot").build(),
-        [0.1, 0.1, 0.1, 1.0],
+        [0.01, 0.01, 0.01, 1.0],
     );
     let mut teapot_world = World::new();
 
