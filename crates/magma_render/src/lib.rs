@@ -13,7 +13,8 @@ mod swapchain;
 mod utils;
 
 pub mod prelude {
-    pub use crate::model::Model;
+    pub use crate::device::Device;
+    pub use crate::model::{Model, OBJVertex};
     pub use crate::pipeline::{Pipeline, PipelineConfigInfo, RenderPipeline, ShaderStageFlag};
     pub use crate::renderer::{
         Format, PushConstantData, Renderer, Vertex, VertexAttributeDescription,

@@ -289,6 +289,11 @@ where
         model
     }
 
+    /// Adds the [`Model`] to this pipeline to be drawn
+    pub fn add_model(&mut self, model: Rc<RefCell<Model<P, V>>>) {
+        self.models.push(model);
+    }
+
     /// Creates a new Vulkan shader module from the shader file at the Path provided.
     ///
     /// Will panic if a file at the [`Path`] could not be found. If the file is found

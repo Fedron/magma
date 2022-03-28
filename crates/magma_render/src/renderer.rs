@@ -165,6 +165,11 @@ impl Renderer {
         self.swapchain.extent_aspect_ratio()
     }
 
+    /// Gets the [`Device`] being used to render
+    pub fn device(&self) -> Rc<Device> {
+        self.device.clone()
+    }
+
     /// Creates empty Vulkan [`CommandBuffer`][ash::vk::CommandBuffer]s
     fn create_command_buffers(
         device: &ash::Device,
