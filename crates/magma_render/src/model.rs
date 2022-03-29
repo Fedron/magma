@@ -1,10 +1,11 @@
 use ash::vk;
 use magma_derive::Vertex;
 use memoffset::offset_of;
-use std::{marker::PhantomData, path::Path, rc::Rc};
+use std::{path::Path, rc::Rc};
 
 use crate::{
-    device::{BufferUsage, Device},
+    buffer::Buffer,
+    device::Device,
     renderer::{
         Format, PushConstantData, Vertex, VertexAttributeDescription, VertexBindingDescription,
         VertexInputRate,
@@ -36,26 +37,17 @@ where
     /// Handle to the Vulkan buffer holding the vertex data
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkBuffer.html
-    vertex_buffer: vk::Buffer,
-    /// Handle to the memory of the buffer holding the vertex data
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDeviceMemory.html
-    vertex_buffer_memory: vk::DeviceMemory,
+    vertex_buffer: Buffer<V>,
     /// Total number of vertices the [`Model`] consists of
     vertex_count: usize,
     /// Handle to the Vulkan buffer holding the indices data
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkBuffer.html
-    indices_buffer: vk::Buffer,
-    /// Handle to the memory of the buffer holding the indices data
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDeviceMemory.html
-    indices_buffer_memory: vk::DeviceMemory,
+    indices_buffer: Buffer<u32>,
     /// Contains the [`PushConstantData`] to push when the [`Model`] is drawn.
     ///
     /// Should be set before the [`Model::draw`] is called.
     push_constants: Option<P>,
-    vertex_phantom: PhantomData<V>,
 }
 
 impl<P, V> Model<P, V>
@@ -75,21 +67,48 @@ where
             panic!("Failed to create model, see above");
         }
 
-        let (vertex_buffer, vertex_buffer_memory) =
-            device.upload_buffer_with_staging(&vertices, BufferUsage::VERTEX);
+        // Copy vertices to GPU memory
+        let mut staging_buffer = Buffer::<V>::new(
+            device.clone(),
+            vertices.len(),
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+        staging_buffer.map(vk::WHOLE_SIZE, 0);
+        staging_buffer.write(&vertices);
 
-        let (indices_buffer, indices_buffer_memory) =
-            device.upload_buffer_with_staging(&indices, BufferUsage::INDICES);
+        let mut vertex_buffer = Buffer::<V>::new(
+            device.clone(),
+            vertices.len(),
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+        vertex_buffer.copy_from(&staging_buffer);
+
+        // Copy indices to GPU memory
+        let mut staging_buffer = Buffer::<u32>::new(
+            device.clone(),
+            indices.len(),
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        );
+        staging_buffer.map(vk::WHOLE_SIZE, 0);
+        staging_buffer.write(&indices);
+
+        let mut indices_buffer = Buffer::<u32>::new(
+            device.clone(),
+            indices.len(),
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+        indices_buffer.copy_from(&staging_buffer);
 
         Model {
             device,
             vertex_buffer,
-            vertex_buffer_memory,
             vertex_count,
             indices_buffer,
-            indices_buffer_memory,
             push_constants: None,
-            vertex_phantom: PhantomData,
         }
     }
 
@@ -173,7 +192,7 @@ where
         }
 
         // Bind
-        let buffers = [self.vertex_buffer];
+        let buffers = [self.vertex_buffer.buffer()];
         let offsets = [0];
 
         unsafe {
@@ -184,7 +203,7 @@ where
 
             self.device.device.cmd_bind_index_buffer(
                 command_buffer,
-                self.indices_buffer,
+                self.indices_buffer.buffer(),
                 0,
                 vk::IndexType::UINT32,
             );
@@ -208,24 +227,5 @@ where
                 0,
             );
         };
-    }
-}
-
-impl<P, V> Drop for Model<P, V>
-where
-    P: PushConstantData,
-    V: Vertex,
-{
-    fn drop(&mut self) {
-        unsafe {
-            self.device.device.destroy_buffer(self.vertex_buffer, None);
-            self.device
-                .device
-                .free_memory(self.vertex_buffer_memory, None);
-            self.device.device.destroy_buffer(self.indices_buffer, None);
-            self.device
-                .device
-                .free_memory(self.indices_buffer_memory, None);
-        }
     }
 }
