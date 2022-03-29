@@ -2,6 +2,7 @@
 
 extern crate log;
 
+mod buffer;
 mod constants;
 mod debug;
 mod device;

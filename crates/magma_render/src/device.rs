@@ -5,7 +5,7 @@ use crate::{
     constants::{DEVICE_EXTENSIONS, ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
     debug::{check_validation_layer_support, setup_debug_utils},
     platforms::required_extension_names,
-    utils,
+    utils, buffer::BufferUsage,
 };
 
 /// Contains information about a Vulkan physical device
@@ -54,14 +54,6 @@ pub struct SwapchainSupportInfo {
     pub present_modes: Vec<vk::PresentModeKHR>,
 }
 
-/// Wraps [`BufferUsageFlags`][ash::vk::BufferUsageFlags] with the specific flags that [`Device`] supports
-#[derive(PartialEq)]
-pub struct BufferUsage(vk::BufferUsageFlags);
-impl BufferUsage {
-    pub const VERTEX: BufferUsage = BufferUsage(vk::BufferUsageFlags::VERTEX_BUFFER);
-    pub const INDICES: BufferUsage = BufferUsage(vk::BufferUsageFlags::INDEX_BUFFER);
-}
-
 /// Represents a Vulkan logical device that can be used to send commands to the GPU
 pub struct Device {
     /// Holds the loaded Vulkan library
@@ -107,7 +99,7 @@ pub struct Device {
 
 impl Device {
     /// Creates a new [`Device`]
-    /// 
+    ///
     /// Loads the Vulkan library, and creates a Vulkan instance and device. If the crate is being
     /// built with debug assertions enabled, a Vulkan debugger messenger wil also be created.
     pub fn new(window: &winit::window::Window) -> Device {
@@ -187,7 +179,7 @@ impl Device {
     }
 
     /// Checks whether the loaded Vulkan library supports the required instance extensions.
-    /// 
+    ///
     /// If not all of the extensions are supported, false will be returned.
     fn check_required_extensions(
         entry: &ash::Entry,
@@ -220,7 +212,7 @@ impl Device {
     }
 
     /// Creates a platform-specific Vulkan surface for an instance.
-    /// 
+    ///
     /// Returns the a surface loader, and the platform-specific surface.
     fn create_surface(
         entry: &ash::Entry,
@@ -277,7 +269,7 @@ impl Device {
     }
 
     /// Check whether the provided device has all the queues and extensions required.
-    /// 
+    ///
     /// If extensions are missing from the device, this function call will panic.
     fn is_physical_device_suitable(
         instance: &ash::Instance,
@@ -361,7 +353,7 @@ impl Device {
     }
 
     /// Checks if the physical device supports the required extensions.
-    /// 
+    ///
     /// If there are extensions that are missing from device that we require, this function will panic.
     fn check_device_extension_support(
         instance: &ash::Instance,
@@ -423,7 +415,7 @@ impl Device {
     }
 
     /// Creates a new Vulkan logical device.
-    /// 
+    ///
     /// Returns the created device, and the [`QueueFamilyIndices`].
     fn create_logical_device(
         instance: &ash::Instance,
@@ -509,7 +501,7 @@ impl Device {
 
 impl Device {
     /// Uploads data onto the GPU through the use of a staging buffer.
-    /// 
+    ///
     /// Returns the created buffer and memory on the GPU.
     pub fn upload_buffer_with_staging<T>(
         &self,
