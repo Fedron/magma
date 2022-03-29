@@ -34,15 +34,11 @@ where
 {
     /// Handle to the Vulkan device used to create buffers and memory for vertex data
     device: Rc<Device>,
-    /// Handle to the Vulkan buffer holding the vertex data
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkBuffer.html
+    /// [`Buffer`] on the GPU holding the vertices
     vertex_buffer: Buffer<V>,
     /// Total number of vertices the [`Model`] consists of
     vertex_count: usize,
-    /// Handle to the Vulkan buffer holding the indices data
-    ///
-    /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkBuffer.html
+    /// [`Buffer`] on the GPU holding the indices
     indices_buffer: Buffer<u32>,
     /// Contains the [`PushConstantData`] to push when the [`Model`] is drawn.
     ///
