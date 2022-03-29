@@ -3,16 +3,7 @@ name = "magma"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-members = ["crates/*"]
-
 [dependencies]
-magma_internal = { path = "crates/magma_internal", version = "0.1.0" }
 
 [dev-dependencies]
 simple_logger = "2.1.0"
-anyhow = "1.0.56"
-
-[[example]]
-name = "cube"
-path = "examples/cube.rs"

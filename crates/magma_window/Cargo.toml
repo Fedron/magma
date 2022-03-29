@@ -1,8 +1,0 @@
-[package]
-name = "magma_window"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-magma_input = { path = "../magma_input", version = "0.1.0" }
-winit = "0.26.1"
