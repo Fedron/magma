@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
 
 use ash::vk;
 use magma_derive::{PushConstantData, Vertex};
@@ -102,5 +102,53 @@ impl Mesh {
             vertex_buffer,
             indices_buffer,
         }
+    }
+
+    /// Creates a new [`Mesh`] from an `.obj` file.
+    ///
+    /// If the `.obj` file contains multiple models, the first model loaded is the one that is created in `magma`.
+    pub fn new_from_file(device: Rc<Device>, file: &Path) -> Mesh {
+        let (models, _) =
+            tobj::load_obj(file, &tobj::LoadOptions::default()).expect("Failed to load OBJ file");
+        let mesh = &models
+            .first()
+            .expect("Failed to get first loaded models")
+            .mesh;
+
+        // Construct the vertices vector
+        let mut vertices: Vec<SimpleVertex> = Vec::new();
+        for vertex in 0..mesh.positions.len() / 3 {
+            let position = [
+                mesh.positions[3 * vertex],
+                mesh.positions[3 * vertex + 1],
+                mesh.positions[3 * vertex + 2],
+            ];
+
+            let mut color = [1.0_f32, 1.0_f32, 1.0_f32];
+            if !mesh.vertex_color.is_empty() {
+                color = [
+                    mesh.vertex_color[3 * vertex],
+                    mesh.vertex_color[3 * vertex + 1],
+                    mesh.vertex_color[3 * vertex + 2],
+                ];
+            }
+
+            let mut normal = [0.0_f32, 1.0_f32, 0.0_f32];
+            if !mesh.normals.is_empty() {
+                normal = [
+                    mesh.normals[3 * vertex],
+                    mesh.normals[3 * vertex + 1],
+                    mesh.normals[3 * vertex + 2],
+                ];
+            }
+
+            vertices.push(SimpleVertex {
+                position,
+                color,
+                normal,
+            });
+        }
+
+        Mesh::new(device.clone(), &vertices, &mesh.indices.clone())
     }
 }

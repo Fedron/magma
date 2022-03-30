@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
 
 use ash::vk;
 
@@ -56,27 +56,7 @@ impl Engine {
             }],
         );
 
-        let mesh = Mesh::new(
-            device.clone(),
-            &[
-                SimpleVertex {
-                    position: [0.0, -0.5, 0.0],
-                    normal: [0.0, 0.0, 0.0],
-                    color: [1.0, 0.0, 0.0],
-                },
-                SimpleVertex {
-                    position: [-0.5, 0.5, 0.0],
-                    normal: [0.0, 0.0, 0.0],
-                    color: [0.0, 1.0, 0.0],
-                },
-                SimpleVertex {
-                    position: [0.5, 0.5, 0.0],
-                    normal: [0.0, 0.0, 0.0],
-                    color: [0.0, 0.0, 1.0],
-                },
-            ],
-            &[0, 1, 2],
-        );
+        let mesh = Mesh::new_from_file(device.clone(), &Path::new("models/teapot.obj"));
 
         Engine {
             window,
