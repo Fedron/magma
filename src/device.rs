@@ -84,7 +84,7 @@ pub struct Device {
     /// Handle to Vulkan logical device
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDevice.html
-    pub device: ash::Device,
+    device: ash::Device,
 
     /// Handle to Vulkan queue used for graphics operations
     pub graphics_queue: vk::Queue,
@@ -500,6 +500,11 @@ impl Device {
 }
 
 impl Device {
+    /// Gets the Vulkan [`device`][ash::Device]
+    pub fn vk(&self) -> &ash::Device {
+        &self.device
+    }
+
     /// Finds a suitable memory type for device memory given a set of required properties
     /// and the ones supported by the physical device
     pub fn find_memory_type(
