@@ -1,4 +1,4 @@
-use magma::prelude::Window;
+use magma::prelude::{Engine, Window};
 
 fn main() {
     simple_logger::SimpleLogger::new()
@@ -6,9 +6,8 @@ fn main() {
         .init()
         .unwrap();
 
-    let mut window = Window::new(1280, 720, "Magma");
+    let window = Window::new(1280, 720, "Magma");
+    let mut engine = Engine::new(window);
 
-    while !window.should_close() {
-        window.poll_events();
-    }
+    engine.run();
 }

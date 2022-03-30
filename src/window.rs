@@ -7,7 +7,7 @@ use winit::{
 };
 
 pub struct Window {
-    _window: WinitWindow,
+    window: WinitWindow,
     event_loop: EventLoop<()>,
     should_close: bool,
 }
@@ -23,7 +23,7 @@ impl Window {
             .unwrap();
 
         Window {
-            _window: window,
+            window,
             event_loop,
             should_close: false,
         }
@@ -46,5 +46,9 @@ impl Window {
 
     pub fn should_close(&self) -> bool {
         self.should_close
+    }
+
+    pub fn winit(&self) -> &WinitWindow {
+        &self.window
     }
 }
