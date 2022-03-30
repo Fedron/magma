@@ -3,6 +3,9 @@ name = "magma"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = ["crates/*"]
+
 [dependencies]
 winit = "0.26.1"
 log = "0.4.14"
