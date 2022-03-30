@@ -5,6 +5,7 @@ mod debug;
 mod device;
 mod engine;
 mod platforms;
+mod swapchain;
 mod utils;
 mod window;
 

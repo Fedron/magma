@@ -1,15 +1,23 @@
-use crate::{device::Device, prelude::Window};
+use std::rc::Rc;
+
+use crate::{device::Device, prelude::Window, swapchain::Swapchain};
 
 pub struct Engine {
     window: Window,
-    device: Device,
+    device: Rc<Device>,
+    swapchain: Swapchain,
 }
 
 impl Engine {
     pub fn new(window: Window) -> Engine {
-        let device = Device::new(&window.winit());
+        let device = Rc::new(Device::new(&window.winit()));
+        let swapchain = Swapchain::new(device.clone());
 
-        Engine { window, device }
+        Engine {
+            window,
+            device,
+            swapchain,
+        }
     }
 
     pub fn run(&mut self) {
