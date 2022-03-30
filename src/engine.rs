@@ -1,10 +1,13 @@
 use std::rc::Rc;
 
 use ash::vk;
-use glam::{vec3, Vec3};
+use glam::{vec3, Mat4, Vec3};
 
 use crate::{
+    buffer::Buffer,
     components::Camera,
+    constants::MAX_FRAMES_IN_FLIGHT,
+    descriptors::{DescriptorPool, DescriptorSetLayout, DescriptorWriter},
     device::Device,
     mesh::{SimplePush, Vertex},
     pipeline::{Pipeline, PipelineConfigInfo, PushConstant, PushConstantData, Shader},
@@ -12,6 +15,13 @@ use crate::{
     renderable::Renderable,
     swapchain::Swapchain,
 };
+
+#[derive(Debug)]
+pub struct GlobalUbo {
+    projection: Mat4,
+    view: Mat4,
+    light_direction: Vec3,
+}
 
 pub struct Engine {
     window: Window,
@@ -21,6 +31,11 @@ pub struct Engine {
     current_image_index: usize,
     is_frame_started: bool,
     clear_color: [f32; 4],
+
+    global_pool: Rc<DescriptorPool>,
+    global_set_layout: Rc<DescriptorSetLayout>,
+    global_descriptor_sets: Vec<vk::DescriptorSet>,
+    ubo_buffers: Vec<Buffer<GlobalUbo>>,
 
     renderables: Vec<Renderable>,
     camera: Camera,
@@ -35,6 +50,58 @@ impl Engine {
             device.command_pool,
             swapchain.framebuffers.len() as u32,
         );
+
+        let global_pool = Rc::new(
+            DescriptorPool::builder(device.clone())
+                .max_sets(MAX_FRAMES_IN_FLIGHT as u32)
+                .add_pool_size(
+                    vk::DescriptorType::UNIFORM_BUFFER,
+                    MAX_FRAMES_IN_FLIGHT as u32,
+                )
+                .build(),
+        );
+
+        let global_set_layout = Rc::new(DescriptorSetLayout::new(
+            device.clone(),
+            &[vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(Shader::VERTEX)
+                .build()],
+        ));
+
+        let mut ubo_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            ubo_buffers.push(Buffer::<GlobalUbo>::new(
+                device.clone(),
+                1,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                device
+                    .physical_device_properties
+                    .limits
+                    .min_uniform_buffer_offset_alignment,
+            ));
+        }
+
+        let mut global_descriptor_sets = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+        for i in 0..MAX_FRAMES_IN_FLIGHT {
+            let set = global_pool.allocate_descriptor_set(global_set_layout.layout);
+
+            let write = vk::WriteDescriptorSet::builder()
+                .descriptor_type(global_set_layout.bindings.get(&0).unwrap().descriptor_type)
+                .dst_binding(0)
+                .dst_set(set)
+                .buffer_info(&[ubo_buffers.get(i).unwrap().descriptor()])
+                .build();
+
+            unsafe {
+                device.vk().update_descriptor_sets(&[write], &[]);
+            };
+
+            global_descriptor_sets.push(set);
+        }
 
         let mut camera = Camera::new();
         camera.set_perspective(
@@ -53,6 +120,12 @@ impl Engine {
             current_image_index: 0,
             is_frame_started: false,
             clear_color,
+
+            global_pool,
+            global_set_layout,
+            global_descriptor_sets,
+            ubo_buffers,
+
             renderables: Vec::new(),
             camera,
         }
@@ -314,6 +387,7 @@ impl Engine {
                 offset: 0,
                 size: std::mem::size_of::<SimplePush>(),
             }],
+            &[self.global_set_layout.layout],
         )
     }
 
@@ -326,12 +400,27 @@ impl Engine {
             self.window.poll_events();
 
             if let Some(command_buffer) = self.begin_frame() {
+                let ubo = GlobalUbo {
+                    projection: self.camera.projection_matrix(),
+                    view: self.camera.view_matrix(),
+                    light_direction: vec3(0.0, 1.0, 0.0),
+                };
+                self.ubo_buffers
+                    .get_mut(self.swapchain.current_frame())
+                    .unwrap()
+                    .map(vk::WHOLE_SIZE, 0);
+                self.ubo_buffers
+                    .get_mut(self.swapchain.current_frame())
+                    .unwrap()
+                    .write(&[ubo]);
+
                 self.begin_swapchain_render_pass(command_buffer);
 
                 if self.renderables.len() > 0 {
                     let mut first_iter = true;
                     let mut current_pipeline =
                         self.renderables.first().unwrap().pipeline.graphics_pipeline;
+
                     for renderable in self.renderables.iter() {
                         if current_pipeline != renderable.pipeline.graphics_pipeline || first_iter {
                             unsafe {
@@ -340,7 +429,20 @@ impl Engine {
                                     vk::PipelineBindPoint::GRAPHICS,
                                     renderable.pipeline.graphics_pipeline,
                                 );
+
+                                self.device.vk().cmd_bind_descriptor_sets(
+                                    command_buffer,
+                                    vk::PipelineBindPoint::GRAPHICS,
+                                    renderable.pipeline.layout,
+                                    0,
+                                    &[*self
+                                        .global_descriptor_sets
+                                        .get(self.swapchain.current_frame())
+                                        .unwrap()],
+                                    &[],
+                                );
                             };
+
                             current_pipeline = renderable.pipeline.graphics_pipeline;
                             first_iter = false;
                         }
@@ -363,9 +465,7 @@ impl Engine {
                             );
 
                             let push_constant = SimplePush {
-                                transform: self.camera.projection_matrix()
-                                    * self.camera.view_matrix()
-                                    * renderable.transform.as_matrix(),
+                                model_matrix: renderable.transform.as_matrix(),
                             };
                             self.device.vk().cmd_push_constants(
                                 command_buffer,

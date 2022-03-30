@@ -585,6 +585,10 @@ impl Swapchain {
         self.extent.width as f32 / self.extent.height as f32
     }
 
+    pub fn current_frame(&self) -> usize {
+        self.current_frame
+    }
+
     /// Acquires the next available framebuffer that can be drawn to
     ///
     /// Returns the index of the framebuffer that was acquired, and whether the [`Swapchain`] is suboptimal for the surface

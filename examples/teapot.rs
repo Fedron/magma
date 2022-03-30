@@ -1,7 +1,7 @@
 use std::{path::Path, rc::Rc};
 
 use glam::Vec3;
-use magma::prelude::{Engine, Mesh, Renderable, Shader, SimpleVertex, Transform, Window};
+use magma::prelude::{Engine, Mesh, OBJVertex, Renderable, Shader, Transform, Window};
 
 fn main() {
     simple_logger::SimpleLogger::new()
@@ -13,7 +13,7 @@ fn main() {
     let mut engine = Engine::new(window, [0.01, 0.01, 0.01, 1.0]);
 
     let teapot = Mesh::new_from_file(engine.device(), &Path::new("models/teapot.obj"));
-    let pipeline = Rc::new(engine.create_pipeline::<SimpleVertex>(&[
+    let pipeline = Rc::new(engine.create_pipeline::<OBJVertex>(&[
         Shader {
             file: "shaders/simple.vert".to_string(),
             entry_point: "main\0".to_string(),

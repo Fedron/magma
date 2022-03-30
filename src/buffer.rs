@@ -35,8 +35,12 @@ impl<T> Buffer<T> {
         instance_count: usize,
         usage: vk::BufferUsageFlags,
         memory_properties: vk::MemoryPropertyFlags,
+        min_offset_alignment: vk::DeviceSize,
     ) -> Buffer<T> {
-        let buffer_size = std::mem::size_of::<T>() * instance_count;
+        let instance_size = std::mem::size_of::<T>();
+        let alignment_size = (instance_size + min_offset_alignment as usize - 1)
+            & !(min_offset_alignment as usize - 1);
+        let buffer_size = alignment_size * instance_count;
 
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(buffer_size as u64)
@@ -85,6 +89,14 @@ impl<T> Buffer<T> {
 
     pub fn len(&self) -> usize {
         self.instance_count as usize
+    }
+
+    pub fn descriptor(&self) -> vk::DescriptorBufferInfo {
+        vk::DescriptorBufferInfo {
+            buffer: self.buffer,
+            offset: 0,
+            range: vk::WHOLE_SIZE,
+        }
     }
 
     /// Gets the handle to the [`Vulkan buffer object`][ash::vk::Buffer]

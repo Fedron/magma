@@ -81,6 +81,7 @@ pub struct Device {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPhysicalDevice.html
     pub physical_device: vk::PhysicalDevice,
+    pub physical_device_properties: vk::PhysicalDeviceProperties,
     /// Handle to Vulkan logical device
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDevice.html
@@ -110,6 +111,8 @@ impl Device {
         let (surface_loader, surface) = Device::create_surface(&entry, &instance, &window);
 
         let physical_device = Device::pick_physical_device(&instance, &surface_loader, &surface);
+        let physical_device_properties =
+            unsafe { instance.get_physical_device_properties(physical_device) };
         let (device, family_indices) =
             Device::create_logical_device(&instance, physical_device, &surface_loader, &surface);
 
@@ -131,6 +134,7 @@ impl Device {
             surface,
 
             physical_device,
+            physical_device_properties,
             device,
 
             graphics_queue,

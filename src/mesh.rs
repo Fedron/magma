@@ -32,7 +32,7 @@ pub trait Vertex {
 }
 
 #[derive(Vertex)]
-pub struct SimpleVertex {
+pub struct OBJVertex {
     #[location = 0]
     pub position: [f32; 3],
     #[location = 1]
@@ -43,12 +43,12 @@ pub struct SimpleVertex {
 
 #[derive(PushConstantData)]
 pub struct SimplePush {
-    pub transform: Mat4,
+    pub model_matrix: Mat4,
 }
 
 pub struct Mesh {
     /// [`Buffer`] on the GPU holding the vertices
-    pub vertex_buffer: Buffer<SimpleVertex>,
+    pub vertex_buffer: Buffer<OBJVertex>,
     /// [`Buffer`] on the GPU holding the indices
     pub indices_buffer: Buffer<u32>,
 }
@@ -57,27 +57,29 @@ impl Mesh {
     /// Creates a new [`Mesh`].
     ///
     /// Assigns the vertices and indices to new dedicated buffers on the GPU.
-    pub fn new(device: Rc<Device>, vertices: &[SimpleVertex], indices: &[u32]) -> Mesh {
+    pub fn new(device: Rc<Device>, vertices: &[OBJVertex], indices: &[u32]) -> Mesh {
         if indices.len() < 3 {
             log::error!("Cannot create a model with less than 3 connected vertices");
             panic!("Failed to create model, see above");
         }
 
         // Copy vertices to GPU memory
-        let mut staging_buffer = Buffer::<SimpleVertex>::new(
+        let mut staging_buffer = Buffer::<OBJVertex>::new(
             device.clone(),
             vertices.len(),
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            1,
         );
         staging_buffer.map(vk::WHOLE_SIZE, 0);
         staging_buffer.write(&vertices);
 
-        let mut vertex_buffer = Buffer::<SimpleVertex>::new(
+        let mut vertex_buffer = Buffer::<OBJVertex>::new(
             device.clone(),
             vertices.len(),
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            1,
         );
         vertex_buffer.copy_from(&staging_buffer);
 
@@ -87,6 +89,7 @@ impl Mesh {
             indices.len(),
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            1,
         );
         staging_buffer.map(vk::WHOLE_SIZE, 0);
         staging_buffer.write(&indices);
@@ -96,6 +99,7 @@ impl Mesh {
             indices.len(),
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            1,
         );
         indices_buffer.copy_from(&staging_buffer);
 
@@ -117,7 +121,7 @@ impl Mesh {
             .mesh;
 
         // Construct the vertices vector
-        let mut vertices: Vec<SimpleVertex> = Vec::new();
+        let mut vertices: Vec<OBJVertex> = Vec::new();
         for vertex in 0..mesh.positions.len() / 3 {
             let position = [
                 mesh.positions[3 * vertex],
@@ -143,7 +147,7 @@ impl Mesh {
                 ];
             }
 
-            vertices.push(SimpleVertex {
+            vertices.push(OBJVertex {
                 position,
                 color,
                 normal,

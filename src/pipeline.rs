@@ -152,6 +152,7 @@ impl Pipeline {
         render_pass: &vk::RenderPass,
         shaders: &[Shader],
         push_constants: &[PushConstant],
+        set_layouts: &[vk::DescriptorSetLayout],
     ) -> Pipeline
     where
         V: Vertex,
@@ -193,8 +194,9 @@ impl Pipeline {
             );
         }
 
-        let layout_info =
-            vk::PipelineLayoutCreateInfo::builder().push_constant_ranges(&push_constant_ranges);
+        let layout_info = vk::PipelineLayoutCreateInfo::builder()
+            .push_constant_ranges(&push_constant_ranges)
+            .set_layouts(set_layouts);
         let layout = unsafe {
             device
                 .vk()
