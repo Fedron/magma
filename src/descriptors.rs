@@ -145,6 +145,14 @@ impl DescriptorPool {
     }
 }
 
+impl Drop for DescriptorPool {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.vk().destroy_descriptor_pool(self.pool, None);
+        };
+    }
+}
+
 pub struct DescriptorWriter {
     layout: Rc<DescriptorSetLayout>,
     pool: Rc<DescriptorPool>,

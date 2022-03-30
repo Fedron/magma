@@ -504,5 +504,10 @@ impl Engine {
 impl Drop for Engine {
     fn drop(&mut self) {
         self.free_command_buffers();
+        unsafe {
+            self.device
+                .vk()
+                .destroy_descriptor_set_layout(self.global_set_layout.layout, None);
+        };
     }
 }
