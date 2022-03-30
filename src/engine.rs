@@ -1,14 +1,15 @@
-use std::{path::Path, rc::Rc};
+use std::rc::Rc;
 
 use ash::vk;
 use glam::{vec3, Vec3};
 
 use crate::{
-    components::{Camera, Transform},
+    components::Camera,
     device::Device,
-    mesh::{SimplePush, SimpleVertex},
+    mesh::{SimplePush, Vertex},
     pipeline::{Pipeline, PipelineConfigInfo, PushConstant, PushConstantData, Shader},
-    prelude::{Mesh, Window},
+    prelude::Window,
+    renderable::Renderable,
     swapchain::Swapchain,
 };
 
@@ -21,9 +22,7 @@ pub struct Engine {
     is_frame_started: bool,
     clear_color: [f32; 4],
 
-    mesh_pipeline: Pipeline,
-    mesh: Mesh,
-    mesh_transform: Transform,
+    renderables: Vec<Renderable>,
     camera: Camera,
 }
 
@@ -37,35 +36,6 @@ impl Engine {
             swapchain.framebuffers.len() as u32,
         );
 
-        let mesh_pipeline = Pipeline::new::<SimpleVertex>(
-            device.clone(),
-            PipelineConfigInfo::default(),
-            &swapchain.render_pass,
-            &[
-                Shader {
-                    file: "shaders/simple.vert".to_string(),
-                    entry_point: "main\0".to_string(),
-                    stage: Shader::VERTEX,
-                },
-                Shader {
-                    file: "shaders/simple.frag".to_string(),
-                    entry_point: "main\0".to_string(),
-                    stage: Shader::FRAGMENT,
-                },
-            ],
-            &[PushConstant {
-                stage: Shader::VERTEX,
-                offset: 0,
-                size: std::mem::size_of::<SimplePush>(),
-            }],
-        );
-
-        let mesh = Mesh::new_from_file(device.clone(), &Path::new("models/teapot.obj"));
-        let mesh_transform = Transform {
-            position: -Vec3::Y,
-            rotation: Vec3::ZERO,
-            scale: Vec3::ONE,
-        };
         let mut camera = Camera::new();
         camera.set_perspective(
             50_f32.to_radians(),
@@ -83,9 +53,7 @@ impl Engine {
             current_image_index: 0,
             is_frame_started: false,
             clear_color,
-            mesh_pipeline,
-            mesh,
-            mesh_transform,
+            renderables: Vec::new(),
             camera,
         }
     }
@@ -328,6 +296,31 @@ impl Engine {
 }
 
 impl Engine {
+    pub fn device(&self) -> Rc<Device> {
+        self.device.clone()
+    }
+
+    pub fn create_pipeline<V>(&self, shaders: &[Shader]) -> Pipeline
+    where
+        V: Vertex,
+    {
+        Pipeline::new::<V>(
+            self.device.clone(),
+            PipelineConfigInfo::default(),
+            &self.swapchain.render_pass,
+            shaders,
+            &[PushConstant {
+                stage: Shader::VERTEX,
+                offset: 0,
+                size: std::mem::size_of::<SimplePush>(),
+            }],
+        )
+    }
+
+    pub fn add_renderable(&mut self, renderable: Renderable) {
+        self.renderables.push(renderable);
+    }
+
     pub fn run(&mut self) {
         while !self.window.should_close() {
             self.window.poll_events();
@@ -335,47 +328,63 @@ impl Engine {
             if let Some(command_buffer) = self.begin_frame() {
                 self.begin_swapchain_render_pass(command_buffer);
 
-                unsafe {
-                    self.device.vk().cmd_bind_pipeline(
-                        command_buffer,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.mesh_pipeline.graphics_pipeline,
-                    );
+                if self.renderables.len() > 0 {
+                    let mut first_iter = true;
+                    let mut current_pipeline =
+                        self.renderables.first().unwrap().pipeline.graphics_pipeline;
+                    for renderable in self.renderables.iter() {
+                        if current_pipeline != renderable.pipeline.graphics_pipeline || first_iter {
+                            unsafe {
+                                self.device.vk().cmd_bind_pipeline(
+                                    command_buffer,
+                                    vk::PipelineBindPoint::GRAPHICS,
+                                    renderable.pipeline.graphics_pipeline,
+                                );
+                            };
+                            current_pipeline = renderable.pipeline.graphics_pipeline;
+                            first_iter = false;
+                        }
 
-                    let buffers = [self.mesh.vertex_buffer.vk()];
-                    let offsets = [0];
+                        let buffers = [renderable.mesh.vertex_buffer.vk()];
+                        let offsets = [0];
 
-                    self.device
-                        .vk()
-                        .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
-                    self.device.vk().cmd_bind_index_buffer(
-                        command_buffer,
-                        self.mesh.indices_buffer.vk(),
-                        0,
-                        vk::IndexType::UINT32,
-                    );
+                        unsafe {
+                            self.device.vk().cmd_bind_vertex_buffers(
+                                command_buffer,
+                                0,
+                                &buffers,
+                                &offsets,
+                            );
+                            self.device.vk().cmd_bind_index_buffer(
+                                command_buffer,
+                                renderable.mesh.indices_buffer.vk(),
+                                0,
+                                vk::IndexType::UINT32,
+                            );
 
-                    let push_constant = SimplePush {
-                        transform: self.camera.projection_matrix()
-                            * self.camera.view_matrix()
-                            * self.mesh_transform.as_matrix(),
-                    };
-                    self.device.vk().cmd_push_constants(
-                        command_buffer,
-                        self.mesh_pipeline.layout,
-                        vk::ShaderStageFlags::VERTEX,
-                        0,
-                        push_constant.as_bytes(),
-                    );
+                            let push_constant = SimplePush {
+                                transform: self.camera.projection_matrix()
+                                    * self.camera.view_matrix()
+                                    * renderable.transform.as_matrix(),
+                            };
+                            self.device.vk().cmd_push_constants(
+                                command_buffer,
+                                renderable.pipeline.layout,
+                                vk::ShaderStageFlags::VERTEX,
+                                0,
+                                push_constant.as_bytes(),
+                            );
 
-                    self.device.vk().cmd_draw_indexed(
-                        command_buffer,
-                        self.mesh.indices_buffer.len() as u32,
-                        1,
-                        0,
-                        0,
-                        0,
-                    );
+                            self.device.vk().cmd_draw_indexed(
+                                command_buffer,
+                                renderable.mesh.indices_buffer.len() as u32,
+                                1,
+                                0,
+                                0,
+                                0,
+                            );
+                        };
+                    }
                 }
 
                 self.end_swapchain_render_pass(command_buffer);
