@@ -35,8 +35,12 @@ impl<T> Buffer<T> {
         instance_count: usize,
         usage: vk::BufferUsageFlags,
         memory_properties: vk::MemoryPropertyFlags,
+        min_offset_alignment: vk::DeviceSize,
     ) -> Buffer<T> {
-        let buffer_size = std::mem::size_of::<T>() * instance_count;
+        let instance_size = std::mem::size_of::<T>();
+        let alignment_size = (instance_size + min_offset_alignment as usize - 1)
+            & !(min_offset_alignment as usize - 1);
+        let buffer_size = alignment_size * instance_count;
 
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(buffer_size as u64)
@@ -45,12 +49,12 @@ impl<T> Buffer<T> {
 
         let buffer = unsafe {
             device
-                .device
+                .vk()
                 .create_buffer(&buffer_info, None)
                 .expect("Failed to create buffer")
         };
 
-        let memory_requirements = unsafe { device.device.get_buffer_memory_requirements(buffer) };
+        let memory_requirements = unsafe { device.vk().get_buffer_memory_requirements(buffer) };
         let memory_type =
             device.find_memory_type(memory_requirements.memory_type_bits, memory_properties);
 
@@ -60,14 +64,14 @@ impl<T> Buffer<T> {
 
         let buffer_memory = unsafe {
             device
-                .device
+                .vk()
                 .allocate_memory(&allocate_info, None)
                 .expect("Failed to allocate buffer memory")
         };
 
         unsafe {
             device
-                .device
+                .vk()
                 .bind_buffer_memory(buffer, buffer_memory, 0)
                 .expect("Failed to bind buffer memory");
         };
@@ -83,8 +87,20 @@ impl<T> Buffer<T> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.instance_count as usize
+    }
+
+    pub fn descriptor(&self) -> vk::DescriptorBufferInfo {
+        vk::DescriptorBufferInfo {
+            buffer: self.buffer,
+            offset: 0,
+            range: vk::WHOLE_SIZE,
+        }
+    }
+
     /// Gets the handle to the [`Vulkan buffer object`][ash::vk::Buffer]
-    pub fn buffer(&self) -> vk::Buffer {
+    pub fn vk(&self) -> vk::Buffer {
         self.buffer
     }
 
@@ -94,7 +110,7 @@ impl<T> Buffer<T> {
     pub fn map(&mut self, size: vk::DeviceSize, offset: vk::DeviceSize) {
         self.mapped = Some(unsafe {
             self.device
-                .device
+                .vk()
                 .map_memory(self.memory, offset, size, vk::MemoryMapFlags::empty())
                 .expect("Failed to map memory") as *mut T
         });
@@ -104,7 +120,7 @@ impl<T> Buffer<T> {
     pub fn unmap(&mut self) {
         if let Some(_) = self.mapped {
             unsafe {
-                self.device.device.unmap_memory(self.memory);
+                self.device.vk().unmap_memory(self.memory);
             };
             self.mapped = None;
         }
@@ -124,7 +140,7 @@ impl<T> Buffer<T> {
     }
 
     /// Copies data from `buffer` to this [`Buffer`].
-    /// 
+    ///
     /// Requires that `buffer` has a TRANSFER_SRC usage flag, and that this [`Buffer`] has a
     /// TRANSFER_DST usage flag. Will panic if this requirement is not met.
     pub fn copy_from(&mut self, buffer: &Buffer<T>) {
@@ -145,7 +161,7 @@ impl<T> Buffer<T> {
 
         let command_buffers = unsafe {
             self.device
-                .device
+                .vk()
                 .allocate_command_buffers(&allocate_info)
                 .expect("Failed to allocate command buffer")
         };
@@ -156,7 +172,7 @@ impl<T> Buffer<T> {
 
         unsafe {
             self.device
-                .device
+                .vk()
                 .begin_command_buffer(command_buffer, &begin_info)
                 .expect("Failed to begin command buffer");
 
@@ -166,7 +182,7 @@ impl<T> Buffer<T> {
                 size: self.size as u64,
             }];
 
-            self.device.device.cmd_copy_buffer(
+            self.device.vk().cmd_copy_buffer(
                 command_buffer,
                 buffer.buffer,
                 self.buffer,
@@ -174,7 +190,7 @@ impl<T> Buffer<T> {
             );
 
             self.device
-                .device
+                .vk()
                 .end_command_buffer(command_buffer)
                 .expect("Failed to end command buffer");
         };
@@ -185,17 +201,17 @@ impl<T> Buffer<T> {
 
         unsafe {
             self.device
-                .device
+                .vk()
                 .queue_submit(self.device.graphics_queue, &submit_infos, vk::Fence::null())
                 .expect("Failed to submit queue");
 
             self.device
-                .device
+                .vk()
                 .queue_wait_idle(self.device.graphics_queue)
                 .expect("Failed to wait for submit queue to finish");
 
             self.device
-                .device
+                .vk()
                 .free_command_buffers(self.device.command_pool, &command_buffers);
         };
     }
@@ -205,8 +221,8 @@ impl<T> Drop for Buffer<T> {
     fn drop(&mut self) {
         self.unmap();
         unsafe {
-            self.device.device.destroy_buffer(self.buffer, None);
-            self.device.device.free_memory(self.memory, None);
+            self.device.vk().destroy_buffer(self.buffer, None);
+            self.device.vk().free_memory(self.memory, None);
         };
     }
 }

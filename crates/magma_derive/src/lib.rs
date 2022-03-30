@@ -17,10 +17,7 @@ pub fn push_constant_data_derive(input: TokenStream) -> TokenStream {
     let ident = &ast.ident;
     quote! {
         impl PushConstantData for #ident {
-            fn as_bytes(&self) -> &[u8]
-            where
-                Self: Sized,
-            {
+            fn as_bytes(&self) -> &[u8] {
                 unsafe {
                     let size_in_bytes = std::mem::size_of::<Self>();
                     let size_in_u8 = size_in_bytes / std::mem::size_of::<u8>();

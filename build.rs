@@ -1,8 +1,6 @@
 fn main() {
-    println!("cargo:rerun-if-changed=shaders/cube.vert");
-    println!("cargo:rerun-if-changed=shaders/cube.frag");
-    println!("cargo:rerun-if-changed=shaders/teapot.vert");
-    println!("cargo:rerun-if-changed=shaders/teapot.frag");
+    println!("cargo:rerun-if-changed=shaders/simple.vert");
+    println!("cargo:rerun-if-changed=shaders/simple.frag");
 
     // Builds all the GLSL shaders to spirv
     let mut shaders_dir = std::env::current_dir().expect("Failed to get current dir");

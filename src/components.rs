@@ -1,5 +1,3 @@
-//! Contains some pre-defined components that [`Entity`]s could use
-
 /// Represents an objects position, rotation, and scale
 #[derive(Debug, Clone, Copy)]
 pub struct Transform {

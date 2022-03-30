@@ -81,10 +81,11 @@ pub struct Device {
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPhysicalDevice.html
     pub physical_device: vk::PhysicalDevice,
+    pub physical_device_properties: vk::PhysicalDeviceProperties,
     /// Handle to Vulkan logical device
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDevice.html
-    pub device: ash::Device,
+    device: ash::Device,
 
     /// Handle to Vulkan queue used for graphics operations
     pub graphics_queue: vk::Queue,
@@ -110,6 +111,8 @@ impl Device {
         let (surface_loader, surface) = Device::create_surface(&entry, &instance, &window);
 
         let physical_device = Device::pick_physical_device(&instance, &surface_loader, &surface);
+        let physical_device_properties =
+            unsafe { instance.get_physical_device_properties(physical_device) };
         let (device, family_indices) =
             Device::create_logical_device(&instance, physical_device, &surface_loader, &surface);
 
@@ -131,6 +134,7 @@ impl Device {
             surface,
 
             physical_device,
+            physical_device_properties,
             device,
 
             graphics_queue,
@@ -500,6 +504,11 @@ impl Device {
 }
 
 impl Device {
+    /// Gets the Vulkan [`device`][ash::Device]
+    pub fn vk(&self) -> &ash::Device {
+        &self.device
+    }
+
     /// Finds a suitable memory type for device memory given a set of required properties
     /// and the ones supported by the physical device
     pub fn find_memory_type(
@@ -592,6 +601,7 @@ impl Device {
 impl Drop for Device {
     fn drop(&mut self) {
         unsafe {
+            self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);

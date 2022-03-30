@@ -1,17 +1,29 @@
 use ash::vk;
-use std::{cell::RefCell, ffi::CString, path::Path, rc::Rc};
+use std::{ffi::CStr, path::Path, rc::Rc};
 
-use crate::{
-    device::Device,
-    model::Model,
-    renderer::{PushConstantData, Vertex},
-};
+use crate::{device::Device, mesh::Vertex};
 
-/// Represents the possible shader stages, wraps [`ash::vk::ShaderStageFlags`]
-pub struct ShaderStageFlag(vk::ShaderStageFlags);
-impl ShaderStageFlag {
-    pub const VERTEX: ShaderStageFlag = ShaderStageFlag(vk::ShaderStageFlags::VERTEX);
-    pub const FRAGMENT: ShaderStageFlag = ShaderStageFlag(vk::ShaderStageFlags::FRAGMENT);
+pub struct Shader {
+    pub file: String,
+    pub entry_point: String,
+    pub stage: vk::ShaderStageFlags,
+}
+
+impl Shader {
+    pub const VERTEX: vk::ShaderStageFlags = vk::ShaderStageFlags::VERTEX;
+    pub const FRAGMENT: vk::ShaderStageFlags = vk::ShaderStageFlags::FRAGMENT;
+}
+
+/// Allows for a struct to be passed to a [`Pipeline`] as a Vulkan push constant
+pub trait PushConstantData {
+    /// Converts [`PushConstantData`] to an array of bytes
+    fn as_bytes(&self) -> &[u8];
+}
+
+pub struct PushConstant {
+    pub stage: vk::ShaderStageFlags,
+    pub offset: usize,
+    pub size: usize,
 }
 
 /// Wraps various Vulkan create infos needed to create a [`Pipeline`]
@@ -123,64 +135,46 @@ impl Default for PipelineConfigInfo {
     }
 }
 
-/// Represents a [`Pipeline`] that can draw to a surface
-pub trait RenderPipeline {
-    /// Draws all the [`Model`]s in a [`Pipeline`] to the command buffer
-    fn draw(&self, command_buffer: vk::CommandBuffer);
-}
-
-pub struct Pipeline<P, V>
-where
-    P: PushConstantData,
-    V: Vertex,
-{
+pub struct Pipeline {
     /// Handle to the [`Device`] being used to draw
     device: Rc<Device>,
     /// Handle to the Vulkan pipeline that can be bound to draw graphics
     pub graphics_pipeline: vk::Pipeline,
     /// Handle to the layout of the pipeline
     pub layout: vk::PipelineLayout,
-    /// List of all the [`Model`]s that will be drawn by this [`Pipeline`]
-    models: Vec<Rc<RefCell<Model<P, V>>>>,
 }
 
-impl<P, V> Pipeline<P, V>
-where
-    P: PushConstantData,
-    V: Vertex,
-{
+impl Pipeline {
     /// Creates a new [`Pipeline`].
-    ///
-    /// The [`Pipeline`] will only be able to draw [`Model`]s with [`Vertex`] and [`PushConstantData`]
-    /// of the same type.
-    ///
-    /// The [`PushConstantData`] will be bound to the shader stages specified by `push_bind_flag`.
-    pub fn new(
+    pub fn new<V>(
         device: Rc<Device>,
         config: PipelineConfigInfo,
         render_pass: &vk::RenderPass,
-        vertex_shader_file: &Path,
-        fragment_shader_file: &Path,
-        push_bind_flag: ShaderStageFlag,
-    ) -> Pipeline<P, V> {
-        let vertex_shader_module =
-            Pipeline::<P, V>::create_shader_module(&device.as_ref().device, vertex_shader_file);
-        let fragment_shader_module =
-            Pipeline::<P, V>::create_shader_module(&device.as_ref().device, fragment_shader_file);
+        shaders: &[Shader],
+        push_constants: &[PushConstant],
+        set_layouts: &[vk::DescriptorSetLayout],
+    ) -> Pipeline
+    where
+        V: Vertex,
+    {
+        let mut shader_modules: Vec<vk::ShaderModule> = Vec::with_capacity(shaders.len());
+        let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> =
+            Vec::with_capacity(shaders.len());
 
-        let entry_point = CString::new("main").unwrap();
-        let shader_stages = [
-            vk::PipelineShaderStageCreateInfo::builder()
-                .module(vertex_shader_module)
-                .name(&entry_point)
-                .stage(vk::ShaderStageFlags::VERTEX)
-                .build(),
-            vk::PipelineShaderStageCreateInfo::builder()
-                .module(fragment_shader_module)
-                .name(&entry_point)
-                .stage(vk::ShaderStageFlags::FRAGMENT)
-                .build(),
-        ];
+        for shader in shaders.iter() {
+            let module = Pipeline::create_shader_module(device.vk(), Path::new(&shader.file));
+            shader_modules.push(module);
+
+            let name =
+                unsafe { CStr::from_bytes_with_nul_unchecked(shader.entry_point.as_bytes()) };
+            shader_stages.push(
+                vk::PipelineShaderStageCreateInfo::builder()
+                    .module(module)
+                    .name(name)
+                    .stage(shader.stage)
+                    .build(),
+            );
+        }
 
         // Create the graphics pipeline
         let attribute_descriptions = V::get_attribute_descriptions();
@@ -189,22 +183,23 @@ where
             .vertex_attribute_descriptions(&attribute_descriptions)
             .vertex_binding_descriptions(&binding_descriptions);
 
-        let push_constant_size = std::mem::size_of::<P>() as u32;
-        let push_constant_ranges = if push_constant_size == 0 {
-            vec![]
-        } else {
-            vec![vk::PushConstantRange::builder()
-                .stage_flags(push_bind_flag.0)
-                .offset(0)
-                .size(push_constant_size)
-                .build()]
-        };
+        let mut push_constant_ranges: Vec<vk::PushConstantRange> = Vec::new();
+        for push_constant in push_constants.iter() {
+            push_constant_ranges.push(
+                vk::PushConstantRange::builder()
+                    .stage_flags(push_constant.stage)
+                    .offset(push_constant.offset as u32)
+                    .size(push_constant.size as u32)
+                    .build(),
+            );
+        }
 
-        let layout_info =
-            vk::PipelineLayoutCreateInfo::builder().push_constant_ranges(&push_constant_ranges);
+        let layout_info = vk::PipelineLayoutCreateInfo::builder()
+            .push_constant_ranges(&push_constant_ranges)
+            .set_layouts(set_layouts);
         let layout = unsafe {
             device
-                .device
+                .vk()
                 .create_pipeline_layout(&layout_info, None)
                 .expect("Failed to create pipeline layout")
         };
@@ -225,7 +220,7 @@ where
 
         let graphics_pipeline = unsafe {
             device
-                .device
+                .vk()
                 .create_graphics_pipelines(
                     vk::PipelineCache::null(),
                     std::slice::from_ref(&pipeline_info),
@@ -235,63 +230,17 @@ where
                 .unwrap()[0]
         };
 
-        unsafe {
-            device
-                .device
-                .destroy_shader_module(vertex_shader_module, None);
-            device
-                .device
-                .destroy_shader_module(fragment_shader_module, None);
-        };
+        for &module in shader_modules.iter() {
+            unsafe {
+                device.vk().destroy_shader_module(module, None);
+            };
+        }
 
         Pipeline {
             device,
             graphics_pipeline,
             layout,
-            models: Vec::new(),
         }
-    }
-
-    /// Creates a new [`Model`] with the same [`Vertex`] and [`PushConstantData`] as the [`Pipeline`].
-    ///
-    /// The [`PushConstantData`] on the new [`Model`] will be set to None. See also [`Model::new`]
-    pub fn create_model(
-        &mut self,
-        vertices: Vec<V>,
-        indices: Vec<u32>,
-    ) -> Rc<RefCell<Model<P, V>>> {
-        let model = Rc::new(RefCell::new(Model::new(
-            self.device.clone(),
-            vertices,
-            indices,
-        )));
-        self.models.push(model.clone());
-        model
-    }
-
-    /// Creates a new [`Model`] with the same [`Vertex`] and [`PushConstantData`] as the [`Pipeline`]
-    /// and will set the [`PushConstantData`] on the new [`Model`].
-    ///
-    /// See also [`Model::new_with_push`].
-    pub fn create_model_with_push(
-        &mut self,
-        vertices: Vec<V>,
-        indices: Vec<u32>,
-        push_constants: P,
-    ) -> Rc<RefCell<Model<P, V>>> {
-        let model = Rc::new(RefCell::new(Model::new_with_push(
-            self.device.clone(),
-            vertices,
-            indices,
-            push_constants,
-        )));
-        self.models.push(model.clone());
-        model
-    }
-
-    /// Adds the [`Model`] to this pipeline to be drawn
-    pub fn add_model(&mut self, model: Rc<RefCell<Model<P, V>>>) {
-        self.models.push(model);
     }
 
     /// Creates a new Vulkan shader module from the shader file at the Path provided.
@@ -321,40 +270,13 @@ where
     }
 }
 
-impl<P, V> RenderPipeline for Pipeline<P, V>
-where
-    P: PushConstantData,
-    V: Vertex,
-{
-    /// Draws al the [`Model`]s in the [`Pipeline`] to the command buffer
-    fn draw(&self, command_buffer: vk::CommandBuffer) {
-        unsafe {
-            self.device.device.cmd_bind_pipeline(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.graphics_pipeline,
-            );
-        };
-
-        for model in self.models.iter() {
-            model.borrow().draw(command_buffer, self.layout);
-        }
-    }
-}
-
-impl<P, V> Drop for Pipeline<P, V>
-where
-    P: PushConstantData,
-    V: Vertex,
-{
+impl Drop for Pipeline {
     fn drop(&mut self) {
         unsafe {
             self.device
-                .device
+                .vk()
                 .destroy_pipeline(self.graphics_pipeline, None);
-            self.device
-                .device
-                .destroy_pipeline_layout(self.layout, None);
+            self.device.vk().destroy_pipeline_layout(self.layout, None);
         };
     }
 }

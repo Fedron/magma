@@ -30,7 +30,7 @@ pub struct Swapchain {
     /// Size, in pixels, of the swapchain
     pub extent: vk::Extent2D,
 
-    /// Depth stencil images drawn to at the same time as colour images
+    /// Depth stencil images drawn to at the same time as color images
     depth_images: Vec<vk::Image>,
     /// GPU memory associated with the depth image at the same index
     depth_image_memories: Vec<vk::DeviceMemory>,
@@ -42,7 +42,7 @@ pub struct Swapchain {
     /// All framebuffers being used
     pub framebuffers: Vec<vk::Framebuffer>,
 
-    /// Colour images that can be be drawn to and presented
+    /// Color images that can be be drawn to and presented
     ///
     /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImage.html
     _images: Vec<vk::Image>,
@@ -78,7 +78,7 @@ impl Swapchain {
 
         let vk_swapchain = Swapchain::create_swapchain(
             &device.instance,
-            &device.device,
+            &device.vk(),
             device.physical_device,
             &device.surface_loader,
             &device.surface,
@@ -86,11 +86,8 @@ impl Swapchain {
             None,
         );
 
-        let image_views = Swapchain::create_image_views(
-            &device.device,
-            vk_swapchain.format,
-            &vk_swapchain.images,
-        );
+        let image_views =
+            Swapchain::create_image_views(&device.vk(), vk_swapchain.format, &vk_swapchain.images);
 
         let render_pass = Swapchain::create_render_pass(device.as_ref(), vk_swapchain.format);
         let (depth_images, depth_image_memories, depth_image_views) =
@@ -100,7 +97,7 @@ impl Swapchain {
                 vk_swapchain.extent,
             );
         let framebuffers = Swapchain::create_framebuffers(
-            &device.device,
+            &device.vk(),
             render_pass,
             &image_views,
             &depth_image_views,
@@ -112,7 +109,7 @@ impl Swapchain {
             render_finished_semaphores,
             in_flight_fences,
             images_in_flight,
-        ) = Swapchain::create_sync_objects(&device.device, vk_swapchain.images.len());
+        ) = Swapchain::create_sync_objects(&device.vk(), vk_swapchain.images.len());
 
         Swapchain {
             device,
@@ -141,7 +138,7 @@ impl Swapchain {
     }
 
     /// Creates a new [`Swapchain`] re-using the old swapchain.
-    /// 
+    ///
     /// See also [`Swapchain::new`]
     pub fn from_old_swapchain(
         device: Rc<Device>,
@@ -156,7 +153,7 @@ impl Swapchain {
 
         let vk_swapchain = Swapchain::create_swapchain(
             &device.instance,
-            &device.device,
+            &device.vk(),
             device.physical_device,
             &device.surface_loader,
             &device.surface,
@@ -164,11 +161,8 @@ impl Swapchain {
             Some(previous_swapchain),
         );
 
-        let image_views = Swapchain::create_image_views(
-            &device.device,
-            vk_swapchain.format,
-            &vk_swapchain.images,
-        );
+        let image_views =
+            Swapchain::create_image_views(&device.vk(), vk_swapchain.format, &vk_swapchain.images);
 
         let render_pass = Swapchain::create_render_pass(device.as_ref(), vk_swapchain.format);
         let (depth_images, depth_image_memories, depth_image_views) =
@@ -178,7 +172,7 @@ impl Swapchain {
                 vk_swapchain.extent,
             );
         let framebuffers = Swapchain::create_framebuffers(
-            &device.device,
+            &device.vk(),
             render_pass,
             &image_views,
             &depth_image_views,
@@ -190,7 +184,7 @@ impl Swapchain {
             render_finished_semaphores,
             in_flight_fences,
             images_in_flight,
-        ) = Swapchain::create_sync_objects(&device.device, vk_swapchain.images.len());
+        ) = Swapchain::create_sync_objects(&device.vk(), vk_swapchain.images.len());
 
         Swapchain {
             device,
@@ -377,7 +371,7 @@ impl Swapchain {
     }
 
     /// Creates a depth stencil image, image view and memory for every framebuffer in the [`Swapchain`].
-    /// 
+    ///
     /// Returns the images, device memory, and image views.
     fn create_depth_resources(
         device: &Device,
@@ -423,7 +417,7 @@ impl Swapchain {
 
             depth_image_views.push(unsafe {
                 device
-                    .device
+                    .vk()
                     .create_image_view(&image_view_info, None)
                     .expect("Failed to create depth image view")
             });
@@ -434,7 +428,7 @@ impl Swapchain {
         (depth_images, depth_image_memories, depth_image_views)
     }
 
-    /// Creates a new render pass with a colour and depth attachment for the [`Swapchain`]
+    /// Creates a new render pass with a color and depth attachment for the [`Swapchain`]
     fn create_render_pass(device: &Device, surface_format: vk::Format) -> vk::RenderPass {
         let color_attachment = vk::AttachmentDescription::builder()
             .format(surface_format)
@@ -494,7 +488,7 @@ impl Swapchain {
 
         unsafe {
             device
-                .device
+                .vk()
                 .create_render_pass(&render_pass_info, None)
                 .expect("Failed to create render pass")
         }
@@ -586,6 +580,15 @@ impl Swapchain {
 }
 
 impl Swapchain {
+    /// Returns the aspect ratio of the [`Swapchain`] extent
+    pub fn extent_aspect_ratio(&self) -> f32 {
+        self.extent.width as f32 / self.extent.height as f32
+    }
+
+    pub fn current_frame(&self) -> usize {
+        self.current_frame
+    }
+
     /// Acquires the next available framebuffer that can be drawn to
     ///
     /// Returns the index of the framebuffer that was acquired, and whether the [`Swapchain`] is suboptimal for the surface
@@ -595,7 +598,7 @@ impl Swapchain {
 
         unsafe {
             self.device
-                .device
+                .vk()
                 .wait_for_fences(&wait_fences, true, std::u64::MAX)
                 .expect("Failed to wait for fences");
 
@@ -621,7 +624,7 @@ impl Swapchain {
             let wait_fences = [self.images_in_flight[index]];
             unsafe {
                 self.device
-                    .device
+                    .vk()
                     .wait_for_fences(&wait_fences, true, std::u64::MAX)
                     .expect("Failed to wait for fences");
             };
@@ -644,12 +647,12 @@ impl Swapchain {
         let reset_fences = [self.in_flight_fences[self.current_frame]];
         unsafe {
             self.device
-                .device
+                .vk()
                 .reset_fences(&reset_fences)
                 .expect("Failed to reset fences");
 
             self.device
-                .device
+                .vk()
                 .queue_submit(
                     self.device.graphics_queue,
                     &submit_infos,
@@ -674,51 +677,44 @@ impl Swapchain {
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
         result
     }
-
-    /// Returns the aspect ratio of the [`Swapchain`] extent
-    pub fn extent_aspect_ratio(&self) -> f32 {
-        self.extent.width as f32 / self.extent.height as f32
-    }
 }
 
 impl Drop for Swapchain {
     fn drop(&mut self) {
         unsafe {
             for &image_view in self.image_views.iter() {
-                self.device.device.destroy_image_view(image_view, None);
+                self.device.vk().destroy_image_view(image_view, None);
             }
 
             self.loader.destroy_swapchain(self.swapchain, None);
 
             for i in 0..self.depth_images.len() {
                 self.device
-                    .device
+                    .vk()
                     .destroy_image_view(*self.depth_image_views.get(i).unwrap(), None);
                 self.device
-                    .device
+                    .vk()
                     .destroy_image(*self.depth_images.get(i).unwrap(), None);
                 self.device
-                    .device
+                    .vk()
                     .free_memory(*self.depth_image_memories.get(i).unwrap(), None);
             }
 
             for &framebuffer in self.framebuffers.iter() {
-                self.device.device.destroy_framebuffer(framebuffer, None);
+                self.device.vk().destroy_framebuffer(framebuffer, None);
             }
 
-            self.device
-                .device
-                .destroy_render_pass(self.render_pass, None);
+            self.device.vk().destroy_render_pass(self.render_pass, None);
 
             for i in 0..MAX_FRAMES_IN_FLIGHT {
                 self.device
-                    .device
+                    .vk()
                     .destroy_semaphore(self.image_available_semaphores[i], None);
                 self.device
-                    .device
+                    .vk()
                     .destroy_semaphore(self.render_finished_semaphores[i], None);
                 self.device
-                    .device
+                    .vk()
                     .destroy_fence(self.in_flight_fences[i], None);
             }
         };

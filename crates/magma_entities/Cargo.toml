@@ -1,8 +1,0 @@
-[package]
-name = "magma_entities"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-glam = "0.20.2"
-downcast-rs = "1.2.0"
