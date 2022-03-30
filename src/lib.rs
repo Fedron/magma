@@ -6,6 +6,7 @@ mod debug;
 mod device;
 mod engine;
 mod mesh;
+mod pipeline;
 mod platforms;
 mod swapchain;
 mod utils;

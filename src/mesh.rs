@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use ash::vk;
-use magma_derive::Vertex;
+use magma_derive::{PushConstantData, Vertex};
 use memoffset::offset_of;
 
-use crate::{buffer::Buffer, device::Device};
+use crate::{buffer::Buffer, device::Device, pipeline::PushConstantData};
 
 /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkVertexInputAttributeDescription.html
 pub type VertexAttributeDescription = vk::VertexInputAttributeDescription;
@@ -33,26 +33,29 @@ pub trait Vertex {
 #[derive(Vertex)]
 pub struct SimpleVertex {
     #[location = 0]
-    position: [f32; 3],
+    pub position: [f32; 3],
     #[location = 1]
-    normal: [f32; 3],
+    pub normal: [f32; 3],
     #[location = 2]
-    color: [f32; 3],
+    pub color: [f32; 3],
+}
+
+#[derive(PushConstantData)]
+pub struct SimplePush {
+    pub offset: [f32; 2],
 }
 
 pub struct Mesh {
     /// [`Buffer`] on the GPU holding the vertices
-    vertex_buffer: Buffer<SimpleVertex>,
+    pub vertex_buffer: Buffer<SimpleVertex>,
     /// [`Buffer`] on the GPU holding the indices
-    indices_buffer: Buffer<u32>,
+    pub indices_buffer: Buffer<u32>,
 }
 
 impl Mesh {
-    /// Creates a new [`Model`].
+    /// Creates a new [`Mesh`].
     ///
     /// Assigns the vertices and indices to new dedicated buffers on the GPU.
-    /// The [`PushConstantData`] is set to `None` and should be set before a call to
-    /// [`Model::draw`].
     pub fn new(device: Rc<Device>, vertices: &[SimpleVertex], indices: &[u32]) -> Mesh {
         if indices.len() < 3 {
             log::error!("Cannot create a model with less than 3 connected vertices");

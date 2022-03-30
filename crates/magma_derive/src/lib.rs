@@ -9,6 +9,26 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+/// Implements the [`as_bytes`] function for [`PushConstantData`]. Required if you want
+/// to be able to pass your [`PushConstantData`] to a [`RenderPipeline`].
+#[proc_macro_derive(PushConstantData)]
+pub fn push_constant_data_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
+    let ident = &ast.ident;
+    quote! {
+        impl PushConstantData for #ident {
+            fn as_bytes(&self) -> &[u8] {
+                unsafe {
+                    let size_in_bytes = std::mem::size_of::<Self>();
+                    let size_in_u8 = size_in_bytes / std::mem::size_of::<u8>();
+                    std::slice::from_raw_parts(self as *const Self as *const u8, size_in_u8)
+                }
+            }
+        }
+    }
+    .into()
+}
+
 /// Generates implementation for getting a [`Vertex`]'s attribute and binding descriptions.
 /// Only works on structs, and expects all attributes to be arrays of type f32 or i32.
 ///

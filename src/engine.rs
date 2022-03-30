@@ -2,7 +2,13 @@ use std::rc::Rc;
 
 use ash::vk;
 
-use crate::{device::Device, prelude::Window, swapchain::Swapchain};
+use crate::{
+    device::Device,
+    mesh::{SimplePush, SimpleVertex},
+    pipeline::{Pipeline, PipelineConfigInfo, PushConstant, PushConstantData, Shader},
+    prelude::{Mesh, Window},
+    swapchain::Swapchain,
+};
 
 pub struct Engine {
     window: Window,
@@ -12,6 +18,9 @@ pub struct Engine {
     current_image_index: usize,
     is_frame_started: bool,
     clear_color: [f32; 4],
+
+    mesh_pipeline: Pipeline,
+    mesh: Mesh,
 }
 
 impl Engine {
@@ -24,6 +33,51 @@ impl Engine {
             swapchain.framebuffers.len() as u32,
         );
 
+        let mesh_pipeline = Pipeline::new::<SimpleVertex>(
+            device.clone(),
+            PipelineConfigInfo::default(),
+            &swapchain.render_pass,
+            &[
+                Shader {
+                    file: "shaders/simple.vert".to_string(),
+                    entry_point: "main\0".to_string(),
+                    stage: Shader::VERTEX,
+                },
+                Shader {
+                    file: "shaders/simple.frag".to_string(),
+                    entry_point: "main\0".to_string(),
+                    stage: Shader::FRAGMENT,
+                },
+            ],
+            &[PushConstant {
+                stage: Shader::VERTEX,
+                offset: 0,
+                size: std::mem::size_of::<SimplePush>(),
+            }],
+        );
+
+        let mesh = Mesh::new(
+            device.clone(),
+            &[
+                SimpleVertex {
+                    position: [0.0, -0.5, 0.0],
+                    normal: [0.0, 0.0, 0.0],
+                    color: [1.0, 0.0, 0.0],
+                },
+                SimpleVertex {
+                    position: [-0.5, 0.5, 0.0],
+                    normal: [0.0, 0.0, 0.0],
+                    color: [0.0, 1.0, 0.0],
+                },
+                SimpleVertex {
+                    position: [0.5, 0.5, 0.0],
+                    normal: [0.0, 0.0, 0.0],
+                    color: [0.0, 0.0, 1.0],
+                },
+            ],
+            &[0, 1, 2],
+        );
+
         Engine {
             window,
             device,
@@ -32,6 +86,8 @@ impl Engine {
             current_image_index: 0,
             is_frame_started: false,
             clear_color,
+            mesh_pipeline,
+            mesh,
         }
     }
 
@@ -279,6 +335,46 @@ impl Engine {
 
             if let Some(command_buffer) = self.begin_frame() {
                 self.begin_swapchain_render_pass(command_buffer);
+
+                unsafe {
+                    self.device.vk().cmd_bind_pipeline(
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        self.mesh_pipeline.graphics_pipeline,
+                    );
+
+                    let buffers = [self.mesh.vertex_buffer.vk()];
+                    let offsets = [0];
+
+                    self.device
+                        .vk()
+                        .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
+                    self.device.vk().cmd_bind_index_buffer(
+                        command_buffer,
+                        self.mesh.indices_buffer.vk(),
+                        0,
+                        vk::IndexType::UINT32,
+                    );
+
+                    let push_constant = SimplePush { offset: [0.0, 0.0] };
+                    self.device.vk().cmd_push_constants(
+                        command_buffer,
+                        self.mesh_pipeline.layout,
+                        vk::ShaderStageFlags::VERTEX,
+                        0,
+                        push_constant.as_bytes(),
+                    );
+
+                    self.device.vk().cmd_draw_indexed(
+                        command_buffer,
+                        self.mesh.indices_buffer.len() as u32,
+                        1,
+                        0,
+                        0,
+                        0,
+                    );
+                }
+
                 self.end_swapchain_render_pass(command_buffer);
                 self.end_frame();
             }
