@@ -1,8 +1,10 @@
 use std::{path::Path, rc::Rc};
 
 use ash::vk;
+use glam::{vec3, Vec3};
 
 use crate::{
+    components::{Camera, Transform},
     device::Device,
     mesh::{SimplePush, SimpleVertex},
     pipeline::{Pipeline, PipelineConfigInfo, PushConstant, PushConstantData, Shader},
@@ -21,6 +23,8 @@ pub struct Engine {
 
     mesh_pipeline: Pipeline,
     mesh: Mesh,
+    mesh_transform: Transform,
+    camera: Camera,
 }
 
 impl Engine {
@@ -57,6 +61,19 @@ impl Engine {
         );
 
         let mesh = Mesh::new_from_file(device.clone(), &Path::new("models/teapot.obj"));
+        let mesh_transform = Transform {
+            position: -Vec3::Y,
+            rotation: Vec3::ZERO,
+            scale: Vec3::ONE,
+        };
+        let mut camera = Camera::new();
+        camera.set_perspective(
+            50_f32.to_radians(),
+            swapchain.extent_aspect_ratio(),
+            0.1,
+            20.0,
+        );
+        camera.look_at(vec3(0.0, 2.5, -10.0), Vec3::ZERO);
 
         Engine {
             window,
@@ -68,6 +85,8 @@ impl Engine {
             clear_color,
             mesh_pipeline,
             mesh,
+            mesh_transform,
+            camera,
         }
     }
 
@@ -336,7 +355,11 @@ impl Engine {
                         vk::IndexType::UINT32,
                     );
 
-                    let push_constant = SimplePush { offset: [0.0, 0.0] };
+                    let push_constant = SimplePush {
+                        transform: self.camera.projection_matrix()
+                            * self.camera.view_matrix()
+                            * self.mesh_transform.as_matrix(),
+                    };
                     self.device.vk().cmd_push_constants(
                         command_buffer,
                         self.mesh_pipeline.layout,

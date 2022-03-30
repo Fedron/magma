@@ -580,6 +580,11 @@ impl Swapchain {
 }
 
 impl Swapchain {
+    /// Returns the aspect ratio of the [`Swapchain`] extent
+    pub fn extent_aspect_ratio(&self) -> f32 {
+        self.extent.width as f32 / self.extent.height as f32
+    }
+
     /// Acquires the next available framebuffer that can be drawn to
     ///
     /// Returns the index of the framebuffer that was acquired, and whether the [`Swapchain`] is suboptimal for the surface

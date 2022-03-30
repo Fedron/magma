@@ -1,6 +1,7 @@
 use std::{path::Path, rc::Rc};
 
 use ash::vk;
+use glam::Mat4;
 use magma_derive::{PushConstantData, Vertex};
 use memoffset::offset_of;
 
@@ -42,7 +43,7 @@ pub struct SimpleVertex {
 
 #[derive(PushConstantData)]
 pub struct SimplePush {
-    pub offset: [f32; 2],
+    pub transform: Mat4,
 }
 
 pub struct Mesh {
