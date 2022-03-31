@@ -47,25 +47,31 @@ pub struct SimplePush {
     pub normal_matrix: Mat4,
 }
 
-pub struct Mesh {
+pub struct Mesh<V>
+where
+    V: Vertex,
+{
     /// [`Buffer`] on the GPU holding the vertices
-    pub vertex_buffer: Buffer<OBJVertex>,
+    pub vertex_buffer: Buffer<V>,
     /// [`Buffer`] on the GPU holding the indices
     pub indices_buffer: Buffer<u32>,
 }
 
-impl Mesh {
+impl<V> Mesh<V>
+where
+    V: Vertex,
+{
     /// Creates a new [`Mesh`].
     ///
     /// Assigns the vertices and indices to new dedicated buffers on the GPU.
-    pub fn new(device: Rc<Device>, vertices: &[OBJVertex], indices: &[u32]) -> Mesh {
+    pub fn new(device: Rc<Device>, vertices: &[V], indices: &[u32]) -> Mesh<V> {
         if indices.len() < 3 {
             log::error!("Cannot create a model with less than 3 connected vertices");
             panic!("Failed to create model, see above");
         }
 
         // Copy vertices to GPU memory
-        let mut staging_buffer = Buffer::<OBJVertex>::new(
+        let mut staging_buffer = Buffer::<V>::new(
             device.clone(),
             vertices.len(),
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -75,7 +81,7 @@ impl Mesh {
         staging_buffer.map(vk::WHOLE_SIZE, 0);
         staging_buffer.write(&vertices);
 
-        let mut vertex_buffer = Buffer::<OBJVertex>::new(
+        let mut vertex_buffer = Buffer::<V>::new(
             device.clone(),
             vertices.len(),
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -113,7 +119,7 @@ impl Mesh {
     /// Creates a new [`Mesh`] from an `.obj` file.
     ///
     /// If the `.obj` file contains multiple models, the first model loaded is the one that is created in `magma`.
-    pub fn new_from_file(device: Rc<Device>, file: &Path) -> Mesh {
+    pub fn new_from_file(device: Rc<Device>, file: &Path) -> Mesh<OBJVertex> {
         let (models, _) =
             tobj::load_obj(file, &tobj::LoadOptions::default()).expect("Failed to load OBJ file");
         let mesh = &models
