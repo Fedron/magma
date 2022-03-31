@@ -1,8 +1,7 @@
 use std::{path::Path, rc::Rc};
 
 use ash::vk;
-use glam::Mat4;
-use magma_derive::{PushConstantData, Vertex};
+use magma_derive::Vertex;
 use memoffset::offset_of;
 
 use crate::{buffer::Buffer, device::Device};

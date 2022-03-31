@@ -20,48 +20,62 @@ impl Shader {
     pub const FRAGMENT: vk::ShaderStageFlags = vk::ShaderStageFlags::FRAGMENT;
 }
 
-pub struct RendererBuilder<V>
+pub trait PushConstant {
+    fn stage() -> vk::ShaderStageFlags;
+    fn as_bytes(&self) -> &[u8];
+}
+
+pub struct RendererBuilder<V, P>
 where
     V: Vertex,
+    P: PushConstant,
 {
     device: Rc<Device>,
     pipeline_config: PipelineConfigInfo,
     render_pass: vk::RenderPass,
     shaders: Vec<Shader>,
-    phantom: PhantomData<V>,
+    v_phantom: PhantomData<V>,
+    p_phantom: PhantomData<P>,
 }
 
-impl<V> RendererBuilder<V>
+impl<V, P> RendererBuilder<V, P>
 where
     V: Vertex,
+    P: PushConstant,
 {
-    pub fn new(device: Rc<Device>, render_pass: vk::RenderPass) -> RendererBuilder<V> {
+    pub fn new(device: Rc<Device>, render_pass: vk::RenderPass) -> RendererBuilder<V, P> {
         RendererBuilder {
             device,
             pipeline_config: PipelineConfigInfo::default(),
-            render_pass: render_pass,
+            render_pass,
             shaders: Vec::new(),
-            phantom: PhantomData,
+            v_phantom: PhantomData,
+            p_phantom: PhantomData,
         }
     }
 
-    pub fn pipeline_config(mut self, config: PipelineConfigInfo) -> RendererBuilder<V> {
+    pub fn pipeline_config(mut self, config: PipelineConfigInfo) -> RendererBuilder<V, P> {
         self.pipeline_config = config;
         self
     }
 
-    pub fn add_shader(mut self, shader: Shader) -> RendererBuilder<V> {
+    pub fn render_pass(mut self, render_pass: vk::RenderPass) -> RendererBuilder<V, P> {
+        self.render_pass = render_pass;
+        self
+    }
+
+    pub fn add_shader(mut self, shader: Shader) -> RendererBuilder<V, P> {
         self.shaders.push(shader);
         self
     }
 
-    pub fn build(self) -> Renderer<V> {
+    pub fn build(self) -> Renderer<V, P> {
         let mut shader_modules: Vec<vk::ShaderModule> = Vec::with_capacity(self.shaders.len());
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> =
             Vec::with_capacity(self.shaders.len());
 
         for shader in self.shaders.iter() {
-            let module = RendererBuilder::<V>::create_shader_module(
+            let module = RendererBuilder::<V, P>::create_shader_module(
                 self.device.vk(),
                 Path::new(&shader.file),
             );
@@ -85,8 +99,14 @@ where
             .vertex_attribute_descriptions(&attribute_descriptions)
             .vertex_binding_descriptions(&binding_descriptions);
 
+        let push_constant_ranges = [vk::PushConstantRange::builder()
+            .stage_flags(P::stage())
+            .offset(0)
+            .size(std::mem::size_of::<P>() as u32)
+            .build()];
+
         let layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .push_constant_ranges(&[])
+            .push_constant_ranges(&push_constant_ranges)
             .set_layouts(&[]);
         let pipeline_layout = unsafe {
             self.device
@@ -132,13 +152,15 @@ where
             pipeline,
             pipeline_layout,
             meshes: Vec::new(),
+            push_constant: None,
         }
     }
 }
 
-impl<V> RendererBuilder<V>
+impl<V, P> RendererBuilder<V, P>
 where
     V: Vertex,
+    P: PushConstant,
 {
     /// Creates a new Vulkan shader module from the shader file at the Path provided.
     ///
@@ -171,39 +193,61 @@ pub trait DrawRenderer {
     fn draw(&self, command_buffer: vk::CommandBuffer);
 }
 
-pub struct Renderer<V>
+pub struct Renderer<V, P>
 where
     V: Vertex,
+    P: PushConstant,
 {
     device: Rc<Device>,
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
     meshes: Vec<Mesh<V>>,
+    push_constant: Option<P>,
 }
 
-impl<V> Renderer<V>
+impl<V, P> Renderer<V, P>
 where
     V: Vertex,
+    P: PushConstant,
 {
-    pub fn builder(device: Rc<Device>, render_pass: vk::RenderPass) -> RendererBuilder<V> {
+    pub fn builder(device: Rc<Device>, render_pass: vk::RenderPass) -> RendererBuilder<V, P> {
         RendererBuilder::new(device, render_pass)
     }
 
     pub fn add_mesh(&mut self, mesh: Mesh<V>) {
         self.meshes.push(mesh);
     }
+
+    pub fn set_push_constant(&mut self, push_constant: P) {
+        self.push_constant = Some(push_constant);
+    }
 }
 
-impl<V> DrawRenderer for Renderer<V>
+impl<V, P> DrawRenderer for Renderer<V, P>
 where
     V: Vertex,
+    P: PushConstant,
 {
     fn draw(&self, command_buffer: vk::CommandBuffer) {
+        if self.push_constant.is_none() {
+            log::warn!("Push constant not assigned in renderer, aborting draw");
+            return;
+        }
+
         unsafe {
             self.device.vk().cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
+            );
+
+            let push_constant = self.push_constant.as_ref().unwrap();
+            self.device.vk().cmd_push_constants(
+                command_buffer,
+                self.pipeline_layout,
+                P::stage(),
+                0,
+                push_constant.as_bytes(),
             );
         };
 
@@ -235,9 +279,10 @@ where
     }
 }
 
-impl<V> Drop for Renderer<V>
+impl<V, P> Drop for Renderer<V, P>
 where
     V: Vertex,
+    P: PushConstant,
 {
     fn drop(&mut self) {
         unsafe {

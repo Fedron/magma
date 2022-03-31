@@ -2,6 +2,7 @@
 
 #![recursion_limit = "128"]
 
+use darling::{usage::Options, FromDeriveInput};
 use proc_macro::TokenStream;
 
 extern crate proc_macro;
@@ -9,20 +10,44 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
-/// Implements the [`as_bytes`] function for [`PushConstantData`]. Required if you want
-/// to be able to pass your [`PushConstantData`] to a [`RenderPipeline`].
-#[proc_macro_derive(PushConstantData)]
-pub fn push_constant_data_derive(input: TokenStream) -> TokenStream {
+#[derive(FromDeriveInput, Default)]
+#[darling(default, attributes(push_constant))]
+struct PushConstantOpts {
+    stage: Option<String>,
+}
+
+/// Implements the [`as_bytes`] function for [`PushConstant`]. Required if you want
+/// to be able to pass your [`PushConstant`] to a [`RenderPipeline`].
+#[proc_macro_derive(PushConstant, attributes(push_constant))]
+pub fn push_constant_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
     let ident = &ast.ident;
+
+    let options = PushConstantOpts::from_derive_input(&ast)
+        .expect("Provided invalid options, only expected 'stage'");
+    let stage = options
+        .stage
+        .expect("Didn't provide a stage")
+        .to_lowercase();
+    let stage = stage.as_str();
+    let stage = match stage {
+        "vertex" => quote! { Shader::VERTEX },
+        "fragment" => quote! { Shader::FRAGMENT },
+        _ => panic!("Unsupported shader stage, must be one of ['vertex', 'fragment']"),
+    };
+
     quote! {
-        impl PushConstantData for #ident {
+        impl PushConstant for #ident {
             fn as_bytes(&self) -> &[u8] {
                 unsafe {
                     let size_in_bytes = std::mem::size_of::<Self>();
                     let size_in_u8 = size_in_bytes / std::mem::size_of::<u8>();
                     std::slice::from_raw_parts(self as *const Self as *const u8, size_in_u8)
                 }
+            }
+
+            fn stage() -> ash::vk::ShaderStageFlags {
+                #stage
             }
         }
     }
