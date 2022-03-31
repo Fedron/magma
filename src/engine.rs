@@ -70,7 +70,7 @@ impl Engine {
                 .binding(0)
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .descriptor_count(1)
-                .stage_flags(Shader::VERTEX)
+                .stage_flags(Shader::VERTEX | Shader::FRAGMENT)
                 .build()],
         ));
 
@@ -399,9 +399,11 @@ impl Engine {
     }
 
     pub fn run(&mut self) {
+        let mut angle: f32 = 0.0;
         while !self.window.should_close() {
             self.window.poll_events();
 
+            angle -= 0.0025;
             if let Some(command_buffer) = self.begin_frame() {
                 let ubo = GlobalUbo {
                     projection: self.camera.projection_matrix(),
@@ -409,7 +411,7 @@ impl Engine {
 
                     ambient_light: vec4(1.0, 1.0, 1.0, 0.02),
                     light_color: vec4(1.0, 1.0, 1.0, 2.0),
-                    light_position: vec4(2.5, 2.5, -2.5, 1.0),
+                    light_position: vec4(angle.cos() * 2.5, 2.5, angle.sin() * 2.5, 1.0),
                 };
                 self.ubo_buffers
                     .get_mut(self.swapchain.current_frame())
