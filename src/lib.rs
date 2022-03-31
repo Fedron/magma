@@ -21,6 +21,6 @@ pub mod prelude {
         Format, Mesh, OBJVertex, Vertex, VertexAttributeDescription, VertexBindingDescription,
         VertexInputRate,
     };
-    pub use crate::renderer::{PushConstant, Renderer, RendererBuilder, Shader};
+    pub use crate::renderer::{NonePushConstant, PushConstant, Renderer, RendererBuilder, Shader};
     pub use crate::window::Window;
 }

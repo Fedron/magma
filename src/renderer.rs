@@ -1,5 +1,6 @@
 use ash::vk;
-use std::{ffi::CStr, marker::PhantomData, path::Path, rc::Rc};
+use magma_derive::PushConstant;
+use std::{any::TypeId, ffi::CStr, marker::PhantomData, path::Path, rc::Rc};
 
 use crate::{
     device::Device,
@@ -25,6 +26,10 @@ pub trait PushConstant {
     fn as_bytes(&self) -> &[u8];
 }
 
+#[derive(PushConstant)]
+#[push_constant(stage = "vertex")]
+pub struct NonePushConstant;
+
 pub struct RendererBuilder<V, P>
 where
     V: Vertex,
@@ -38,7 +43,7 @@ where
     p_phantom: PhantomData<P>,
 }
 
-impl<V, P> RendererBuilder<V, P>
+impl<V, P: 'static> RendererBuilder<V, P>
 where
     V: Vertex,
     P: PushConstant,
@@ -99,11 +104,16 @@ where
             .vertex_attribute_descriptions(&attribute_descriptions)
             .vertex_binding_descriptions(&binding_descriptions);
 
-        let push_constant_ranges = [vk::PushConstantRange::builder()
-            .stage_flags(P::stage())
-            .offset(0)
-            .size(std::mem::size_of::<P>() as u32)
-            .build()];
+        let mut push_constant_ranges: Vec<vk::PushConstantRange> = Vec::new();
+        if TypeId::of::<P>() != TypeId::of::<NonePushConstant>() {
+            push_constant_ranges.push(
+                vk::PushConstantRange::builder()
+                    .stage_flags(P::stage())
+                    .offset(0)
+                    .size(std::mem::size_of::<P>() as u32)
+                    .build(),
+            );
+        };
 
         let layout_info = vk::PipelineLayoutCreateInfo::builder()
             .push_constant_ranges(&push_constant_ranges)
@@ -152,6 +162,7 @@ where
             pipeline,
             pipeline_layout,
             meshes: Vec::new(),
+            is_none_push_constant: TypeId::of::<P>() == TypeId::of::<NonePushConstant>(),
             push_constant: None,
         }
     }
@@ -202,10 +213,11 @@ where
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
     meshes: Vec<Mesh<V>>,
+    is_none_push_constant: bool,
     push_constant: Option<P>,
 }
 
-impl<V, P> Renderer<V, P>
+impl<V, P: 'static> Renderer<V, P>
 where
     V: Vertex,
     P: PushConstant,
@@ -229,7 +241,7 @@ where
     P: PushConstant,
 {
     fn draw(&self, command_buffer: vk::CommandBuffer) {
-        if self.push_constant.is_none() {
+        if !self.is_none_push_constant && self.push_constant.is_none() {
             log::warn!("Push constant not assigned in renderer, aborting draw");
             return;
         }
@@ -241,14 +253,16 @@ where
                 self.pipeline,
             );
 
-            let push_constant = self.push_constant.as_ref().unwrap();
-            self.device.vk().cmd_push_constants(
-                command_buffer,
-                self.pipeline_layout,
-                P::stage(),
-                0,
-                push_constant.as_bytes(),
-            );
+            if !self.is_none_push_constant {
+                let push_constant = self.push_constant.as_ref().unwrap();
+                self.device.vk().cmd_push_constants(
+                    command_buffer,
+                    self.pipeline_layout,
+                    P::stage(),
+                    0,
+                    push_constant.as_bytes(),
+                );
+            }
         };
 
         for mesh in self.meshes.iter() {
