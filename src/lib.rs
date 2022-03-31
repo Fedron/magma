@@ -8,7 +8,6 @@ mod descriptors;
 mod device;
 mod engine;
 mod mesh;
-mod pipeline;
 mod platforms;
 mod renderer;
 mod swapchain;
@@ -22,7 +21,6 @@ pub mod prelude {
         Format, Mesh, OBJVertex, Vertex, VertexAttributeDescription, VertexBindingDescription,
         VertexInputRate,
     };
-    pub use crate::pipeline::Shader;
-    pub use crate::renderer::{Renderer, RendererBuilder, Shader as RShader};
+    pub use crate::renderer::{Renderer, RendererBuilder, Shader};
     pub use crate::window::Window;
 }

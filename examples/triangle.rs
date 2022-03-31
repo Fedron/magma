@@ -16,15 +16,15 @@ fn main() {
 
     let mut renderer =
         Renderer::<TriangleVertex>::builder(engine.device(), engine.swapchain_renderpass())
-            .add_shader(RShader {
+            .add_shader(Shader {
                 file: "shaders/triangle.vert",
                 entry_point: "main\0",
-                stage: RShader::VERTEX,
+                stage: Shader::VERTEX,
             })
-            .add_shader(RShader {
+            .add_shader(Shader {
                 file: "shaders/triangle.frag",
                 entry_point: "main\0",
-                stage: RShader::FRAGMENT,
+                stage: Shader::FRAGMENT,
             })
             .build();
     renderer.add_mesh(Mesh::new(

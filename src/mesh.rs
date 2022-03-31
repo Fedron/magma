@@ -5,7 +5,7 @@ use glam::Mat4;
 use magma_derive::{PushConstantData, Vertex};
 use memoffset::offset_of;
 
-use crate::{buffer::Buffer, device::Device, pipeline::PushConstantData};
+use crate::{buffer::Buffer, device::Device};
 
 /// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkVertexInputAttributeDescription.html
 pub type VertexAttributeDescription = vk::VertexInputAttributeDescription;
@@ -39,12 +39,6 @@ pub struct OBJVertex {
     pub normal: [f32; 3],
     #[location = 2]
     pub color: [f32; 3],
-}
-
-#[derive(PushConstantData)]
-pub struct SimplePush {
-    pub model_matrix: Mat4,
-    pub normal_matrix: Mat4,
 }
 
 pub struct Mesh<V>
