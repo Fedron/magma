@@ -1,5 +1,4 @@
 use ash::vk;
-use magma_derive::PushConstant;
 use std::{any::TypeId, ffi::CStr, marker::PhantomData, path::Path, rc::Rc};
 
 use crate::{
@@ -8,27 +7,11 @@ use crate::{
 };
 
 mod pipeline;
+mod shader;
+
 use pipeline::PipelineConfigInfo;
-
-pub struct Shader {
-    pub file: &'static str,
-    pub entry_point: &'static str,
-    pub stage: vk::ShaderStageFlags,
-}
-
-impl Shader {
-    pub const VERTEX: vk::ShaderStageFlags = vk::ShaderStageFlags::VERTEX;
-    pub const FRAGMENT: vk::ShaderStageFlags = vk::ShaderStageFlags::FRAGMENT;
-}
-
-pub trait PushConstant {
-    fn stage() -> vk::ShaderStageFlags;
-    fn as_bytes(&self) -> &[u8];
-}
-
-#[derive(PushConstant)]
-#[push_constant(stage = "vertex")]
-pub struct NonePushConstant;
+use shader::ShaderCompiler;
+pub use shader::{NonePushConstant, PushConstant, Shader};
 
 pub struct RendererBuilder<V, P>
 where
@@ -80,6 +63,10 @@ where
             Vec::with_capacity(self.shaders.len());
 
         for shader in self.shaders.iter() {
+            if shader.stage == Shader::VERTEX {
+                ShaderCompiler::new(shader.clone()).check_vertex_attributes::<V>();
+            }
+
             let module = RendererBuilder::<V, P>::create_shader_module(
                 self.device.vk(),
                 Path::new(&shader.file),
