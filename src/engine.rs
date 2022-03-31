@@ -396,14 +396,17 @@ impl Engine {
     }
 
     pub fn run(&mut self) {
+        let mut angle: f32 = 0.0;
         while !self.window.should_close() {
             self.window.poll_events();
 
             if let Some(command_buffer) = self.begin_frame() {
+                angle -= 0.0025;
+
                 let ubo = GlobalUbo {
                     projection: self.camera.projection_matrix(),
                     view: self.camera.view_matrix(),
-                    light_direction: vec3(0.0, 1.0, 0.0),
+                    light_direction: vec3(angle.cos() * 5.0, angle.sin() * 5.0, 0.0),
                 };
                 self.ubo_buffers
                     .get_mut(self.swapchain.current_frame())
@@ -466,6 +469,9 @@ impl Engine {
 
                             let push_constant = SimplePush {
                                 model_matrix: renderable.transform.as_matrix(),
+                                normal_matrix: Mat4::from_mat3(
+                                    renderable.transform.as_normal_matrix(),
+                                ),
                             };
                             self.device.vk().cmd_push_constants(
                                 command_buffer,

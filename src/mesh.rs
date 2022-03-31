@@ -44,6 +44,7 @@ pub struct OBJVertex {
 #[derive(PushConstantData)]
 pub struct SimplePush {
     pub model_matrix: Mat4,
+    pub normal_matrix: Mat4,
 }
 
 pub struct Mesh {
