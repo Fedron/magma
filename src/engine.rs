@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use ash::vk;
-use glam::{vec3, Mat4, Vec3};
+use glam::{vec3, vec4, Mat4, Vec3, Vec4};
 
 use crate::{
     buffer::Buffer,
@@ -20,7 +20,10 @@ use crate::{
 pub struct GlobalUbo {
     projection: Mat4,
     view: Mat4,
-    light_direction: Vec3,
+
+    ambient_light: Vec4,
+    light_position: Vec4,
+    light_color: Vec4,
 }
 
 pub struct Engine {
@@ -110,7 +113,7 @@ impl Engine {
             0.1,
             20.0,
         );
-        camera.look_at(vec3(0.0, 2.5, -10.0), Vec3::ZERO);
+        camera.look_at(vec3(0.0, 4.0, -10.0), Vec3::ZERO);
 
         Engine {
             window,
@@ -396,17 +399,17 @@ impl Engine {
     }
 
     pub fn run(&mut self) {
-        let mut angle: f32 = 0.0;
         while !self.window.should_close() {
             self.window.poll_events();
 
             if let Some(command_buffer) = self.begin_frame() {
-                angle -= 0.0025;
-
                 let ubo = GlobalUbo {
                     projection: self.camera.projection_matrix(),
                     view: self.camera.view_matrix(),
-                    light_direction: vec3(angle.cos() * 5.0, angle.sin() * 5.0, 0.0),
+
+                    ambient_light: vec4(1.0, 1.0, 1.0, 0.02),
+                    light_color: vec4(1.0, 1.0, 1.0, 2.0),
+                    light_position: vec4(2.5, 2.5, -2.5, 1.0),
                 };
                 self.ubo_buffers
                     .get_mut(self.swapchain.current_frame())

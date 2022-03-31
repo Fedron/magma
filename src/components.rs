@@ -29,9 +29,9 @@ impl Transform {
             self.scale,
             glam::Quat::from_euler(
                 glam::EulerRot::YXZ,
-                self.rotation.y,
-                self.rotation.x,
-                self.rotation.z,
+                self.rotation.y.to_radians(),
+                self.rotation.x.to_radians(),
+                self.rotation.z.to_radians(),
             ),
             self.position,
         )
