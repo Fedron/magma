@@ -2,7 +2,7 @@ use ash::vk;
 use std::{any::TypeId, collections::HashMap, ffi::CStr, marker::PhantomData, path::Path, rc::Rc};
 
 use crate::{
-    descriptors::DescriptorSetLayout,
+    descriptors::{DescriptorPool, DescriptorSetLayout},
     device::Device,
     mesh::{Mesh, Vertex},
 };
@@ -31,7 +31,10 @@ where
     pipeline_config: PipelineConfigInfo,
     render_pass: vk::RenderPass,
     shaders: Vec<Shader>,
+
     ubos: Vec<UniformBufferDescription>,
+    descriptor_pool_sets: u32,
+
     v_phantom: PhantomData<V>,
     p_phantom: PhantomData<P>,
 }
@@ -47,7 +50,10 @@ where
             pipeline_config: PipelineConfigInfo::default(),
             render_pass,
             shaders: Vec::new(),
+
             ubos: Vec::new(),
+            descriptor_pool_sets: 100,
+
             v_phantom: PhantomData,
             p_phantom: PhantomData,
         }
@@ -63,12 +69,17 @@ where
         self
     }
 
+    pub fn max_descriptor_pool_sets(mut self, max_sets: u32) -> RendererBuilder<V, P> {
+        self.descriptor_pool_sets = max_sets;
+        self
+    }
+
     pub fn add_shader(mut self, shader: Shader) -> RendererBuilder<V, P> {
         self.shaders.push(shader);
         self
     }
 
-    pub fn add_ubo<U>(mut self, set: u32, binding: u32) -> RendererBuilder<V, P>
+    pub fn add_ubo<U: 'static>(mut self, set: u32, binding: u32) -> RendererBuilder<V, P>
     where
         U: UniformBuffer,
     {
@@ -142,7 +153,7 @@ where
         self.ubos.sort_by(|a, b| a.set.cmp(&b.set));
         let mut descriptor_set_layouts: HashMap<u32, Vec<vk::DescriptorSetLayoutBinding>> =
             HashMap::new();
-        for ubo in self.ubos {
+        for ubo in self.ubos.iter() {
             if !descriptor_set_layouts.contains_key(&ubo.set) {
                 descriptor_set_layouts.insert(ubo.set, Vec::new());
             }
@@ -206,11 +217,29 @@ where
             };
         }
 
+        // Create descriptor pool and buffers for any ubos
+        let descriptor_pool: Option<DescriptorPool> = if self.ubos.len() == 0 {
+            None
+        } else {
+            Some(
+                DescriptorPool::builder(self.device.clone())
+                    .max_sets(self.descriptor_pool_sets)
+                    .add_pool_size(
+                        vk::DescriptorType::UNIFORM_BUFFER,
+                        self.descriptor_pool_sets as u32,
+                    )
+                    .build(),
+            )
+        };
+
         Renderer {
             device: self.device,
             pipeline,
             pipeline_layout,
+
+            descriptor_pool,
             descriptor_layouts: layouts,
+
             meshes: Vec::new(),
             is_none_push_constant: TypeId::of::<P>() == TypeId::of::<NonePushConstant>(),
             push_constant: None,
@@ -262,7 +291,10 @@ where
     device: Rc<Device>,
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
+
+    descriptor_pool: Option<DescriptorPool>,
     descriptor_layouts: Vec<vk::DescriptorSetLayout>,
+
     meshes: Vec<Mesh<V>>,
     is_none_push_constant: bool,
     push_constant: Option<P>,
