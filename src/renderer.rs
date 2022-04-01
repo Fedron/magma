@@ -1,7 +1,8 @@
 use ash::vk;
-use std::{any::TypeId, ffi::CStr, marker::PhantomData, path::Path, rc::Rc};
+use std::{any::TypeId, collections::HashMap, ffi::CStr, marker::PhantomData, path::Path, rc::Rc};
 
 use crate::{
+    descriptors::DescriptorSetLayout,
     device::Device,
     mesh::{Mesh, Vertex},
 };
@@ -80,7 +81,7 @@ where
         self
     }
 
-    pub fn build(self) -> Renderer<V, P> {
+    pub fn build(mut self) -> Renderer<V, P> {
         let mut shader_modules: Vec<vk::ShaderModule> = Vec::with_capacity(self.shaders.len());
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> =
             Vec::with_capacity(self.shaders.len());
@@ -138,9 +139,34 @@ where
             );
         };
 
+        self.ubos.sort_by(|a, b| a.set.cmp(&b.set));
+        let mut descriptor_set_layouts: HashMap<u32, Vec<vk::DescriptorSetLayoutBinding>> =
+            HashMap::new();
+        for ubo in self.ubos {
+            if !descriptor_set_layouts.contains_key(&ubo.set) {
+                descriptor_set_layouts.insert(ubo.set, Vec::new());
+            }
+
+            let descriptor_set_layout = descriptor_set_layouts.get_mut(&ubo.set).unwrap();
+            descriptor_set_layout.push(
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(ubo.binding)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(ubo.stage)
+                    .build(),
+            );
+        }
+
+        let mut layouts: Vec<vk::DescriptorSetLayout> = Vec::new();
+        for (_, bindings) in descriptor_set_layouts.iter() {
+            let layout = DescriptorSetLayout::new(self.device.clone(), &bindings);
+            layouts.push(layout.layout);
+        }
+
         let layout_info = vk::PipelineLayoutCreateInfo::builder()
             .push_constant_ranges(&push_constant_ranges)
-            .set_layouts(&[]);
+            .set_layouts(&layouts);
         let pipeline_layout = unsafe {
             self.device
                 .vk()
@@ -184,6 +210,7 @@ where
             device: self.device,
             pipeline,
             pipeline_layout,
+            descriptor_layouts: layouts,
             meshes: Vec::new(),
             is_none_push_constant: TypeId::of::<P>() == TypeId::of::<NonePushConstant>(),
             push_constant: None,
@@ -235,6 +262,7 @@ where
     device: Rc<Device>,
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
+    descriptor_layouts: Vec<vk::DescriptorSetLayout>,
     meshes: Vec<Mesh<V>>,
     is_none_push_constant: bool,
     push_constant: Option<P>,
@@ -327,6 +355,10 @@ where
             self.device
                 .vk()
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+
+            for &layout in self.descriptor_layouts.iter() {
+                self.device.vk().destroy_descriptor_set_layout(layout, None);
+            }
         };
     }
 }

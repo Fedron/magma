@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use glam::{Mat4, Vec4};
 use magma::prelude::*;
 use magma_derive::UniformBuffer;
