@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::fs::read_to_string;
 
 use ash::vk;
@@ -6,6 +7,8 @@ use glsl::syntax::{ExternalDeclaration, ShaderStage};
 use magma_derive::UniformBuffer;
 
 use crate::mesh::Vertex;
+
+use super::UniformBufferDescription;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Shader {
@@ -170,7 +173,102 @@ impl ShaderCompiler {
         }
     }
 
-    pub fn check_push_constant<P>(&self)
+    pub fn check_ubos(&self, ubos: Vec<UniformBufferDescription>) {
+        // Represents the set, binding, and field sizes of every ubo in the shader
+        let mut shader_ubos: Vec<(u32, u32, Vec<u32>)> = Vec::new();
+        for declaration in self.declarations.iter() {
+            if let glsl::syntax::ExternalDeclaration::Declaration(declaration) = declaration {
+                if let glsl::syntax::Declaration::Block(block) = declaration {
+                    let qualifiers = &block.qualifier.qualifiers.0;
+                    for qualifier in qualifiers.iter() {
+                        let mut ubo: Option<(u32, u32)> = None;
+                        match qualifier {
+                            glsl::syntax::TypeQualifierSpec::Layout(layout) => {
+                                let mut set: Option<u32> = None;
+                                let mut binding: Option<u32> = None;
+                                for layout in layout.ids.0.iter() {
+                                    if let glsl::syntax::LayoutQualifierSpec::Identifier(
+                                        name,
+                                        expr,
+                                    ) = layout
+                                    {
+                                        if expr.is_none() {
+                                            continue;
+                                        }
+
+                                        let expr = expr.as_ref().unwrap();
+                                        if name.0 == "set" {
+                                            if let glsl::syntax::Expr::IntConst(val) = **expr {
+                                                set = Some(val as u32);
+                                            }
+                                        } else if name.0 == "binding" {
+                                            if let glsl::syntax::Expr::IntConst(val) = **expr {
+                                                binding = Some(val as u32);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Assume that a layout tha specifies a set and binding is a ubo
+                                if set.is_some() && binding.is_some() {
+                                    ubo = Some((set.unwrap(), binding.unwrap()));
+                                }
+                            }
+                            _ => {}
+                        }
+
+                        if let Some(ubo) = ubo {
+                            let mut sizes: Vec<u32> = Vec::new();
+                            for field in block.fields.iter() {
+                                let vk_type = glsl_type_to_vk(&field.ty.ty);
+                                sizes.push(vk_type.1);
+                            }
+                            shader_ubos.push((ubo.0, ubo.1, sizes));
+                        }
+                    }
+                }
+            }
+        }
+
+        if shader_ubos.len() > 0 && ubos.len() == 0 {
+            panic!(
+                "Expected {} ubo(s) for shader, but found none in renderer",
+                shader_ubos.len()
+            );
+        }
+
+        if shader_ubos.len() != ubos.len() {
+            panic!(
+                "Shader and renderer define a different number of ubos, {} and {} respectively",
+                shader_ubos.len(),
+                ubos.len()
+            );
+        }
+
+        for s_ubo in shader_ubos.iter() {
+            let mut found_ubo = false;
+            for ubo in ubos.iter() {
+                if !(s_ubo.0 == ubo.set && s_ubo.1 == ubo.binding) {
+                    continue;
+                }
+
+                found_ubo = true;
+
+                for (index, (&s_size, u_size)) in s_ubo.2.iter().zip(ubo.sizes.clone()).enumerate()
+                {
+                    if s_size != u_size {
+                        panic!("Field {} doesn't match size in bytes in the shader with the ubo supplied in the renderer (expected = {}, found = {})", index, s_size, u_size);
+                    }
+                }
+            }
+
+            if !found_ubo {
+                panic!("Shader expects a ubo at (set = {}, binding = {}) but couldn't find a ubo with the same set and binding in the renderer", s_ubo.0, s_ubo.1);
+            }
+        }
+    }
+
+    pub fn check_push_constant<P: 'static>(&self)
     where
         P: UniformBuffer,
     {
@@ -202,6 +300,10 @@ impl ShaderCompiler {
                     }
 
                     if is_push_constant {
+                        if TypeId::of::<P>() == TypeId::of::<NonePushConstant>() {
+                            panic!("Found push constant in shader, but trying to build renderer without push constant");
+                        }
+
                         let mut push_sizes: Vec<u32> = Vec::new();
                         for field in block.fields.iter() {
                             let vk_type = glsl_type_to_vk(&field.ty.ty);
@@ -232,11 +334,11 @@ impl ShaderCompiler {
                         for (index, (&size, p_size)) in sizes.iter().zip(P::sizes()).enumerate() {
                             if size != p_size {
                                 panic!(
-                "Field {} has a different size between the PushConstantData ({}) struct and shader ({})",
-                index,
-                p_size,
-                size
-            );
+                                    "Field {} has a different size between the PushConstantData ({}) struct and shader ({})",
+                                    index,
+                                    p_size,
+                                    size
+                                );
                             }
                         }
 
@@ -268,6 +370,7 @@ fn glsl_type_to_vk(ty: &glsl::syntax::TypeSpecifierNonArray) -> (vk::Format, u32
     match ty {
         glsl::syntax::TypeSpecifierNonArray::Vec2 => (vk::Format::R32G32_SFLOAT, 8),
         glsl::syntax::TypeSpecifierNonArray::Vec3 => (vk::Format::R32G32B32_SFLOAT, 12),
+        glsl::syntax::TypeSpecifierNonArray::Vec4 => (vk::Format::R32G32B32A32_SFLOAT, 16),
         glsl::syntax::TypeSpecifierNonArray::Mat4 => (vk::Format::UNDEFINED, 64),
         _ => panic!("Unsupported type '{:?}'", ty),
     }

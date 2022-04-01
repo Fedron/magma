@@ -33,7 +33,8 @@ pub fn derive_uniform_buffer(input: TokenStream) -> TokenStream {
     let stage = match stage {
         "vertex" => quote! { Shader::VERTEX },
         "fragment" => quote! { Shader::FRAGMENT },
-        _ => panic!("Unsupported shader stage, must be one of ['vertex', 'fragment']"),
+        "both" => quote! { Shader::VERTEX | Shader::FRAGMENT },
+        _ => panic!("Unsupported shader stage, must be one of ['vertex', 'fragment', 'both']"),
     };
 
     let sizes = generate_push_sizes(&ast.data);
@@ -270,8 +271,9 @@ fn get_field_size(field: &syn::Field) -> u32 {
 
 fn glam_type_to_size(ty: &str) -> u32 {
     match ty {
-        "Mat4" => 64,
         "Vec3" => 12,
+        "Vec4" => 16,
+        "Mat4" => 64,
         _ => panic!("Unsupported type"),
     }
 }

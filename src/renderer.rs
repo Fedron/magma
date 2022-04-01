@@ -11,7 +11,15 @@ mod shader;
 
 use pipeline::PipelineConfigInfo;
 use shader::ShaderCompiler;
-pub use shader::{NonePushConstant, UniformBuffer, Shader};
+pub use shader::{NonePushConstant, Shader, UniformBuffer};
+
+#[derive(Debug, Clone)]
+pub struct UniformBufferDescription {
+    pub stage: vk::ShaderStageFlags,
+    pub sizes: Vec<u32>,
+    pub set: u32,
+    pub binding: u32,
+}
 
 pub struct RendererBuilder<V, P>
 where
@@ -22,6 +30,7 @@ where
     pipeline_config: PipelineConfigInfo,
     render_pass: vk::RenderPass,
     shaders: Vec<Shader>,
+    ubos: Vec<UniformBufferDescription>,
     v_phantom: PhantomData<V>,
     p_phantom: PhantomData<P>,
 }
@@ -37,6 +46,7 @@ where
             pipeline_config: PipelineConfigInfo::default(),
             render_pass,
             shaders: Vec::new(),
+            ubos: Vec::new(),
             v_phantom: PhantomData,
             p_phantom: PhantomData,
         }
@@ -57,6 +67,19 @@ where
         self
     }
 
+    pub fn add_ubo<U>(mut self, set: u32, binding: u32) -> RendererBuilder<V, P>
+    where
+        U: UniformBuffer,
+    {
+        self.ubos.push(UniformBufferDescription {
+            stage: U::stage(),
+            sizes: U::sizes(),
+            set,
+            binding,
+        });
+        self
+    }
+
     pub fn build(self) -> Renderer<V, P> {
         let mut shader_modules: Vec<vk::ShaderModule> = Vec::with_capacity(self.shaders.len());
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> =
@@ -67,11 +90,18 @@ where
             if shader.stage == Shader::VERTEX {
                 compiler.check_vertex_attributes::<V>();
             }
-            if TypeId::of::<P>() != TypeId::of::<NonePushConstant>() {
-                if P::stage().contains(shader.stage) {
-                    compiler.check_push_constant::<P>();
-                }
+
+            if P::stage().contains(shader.stage) {
+                compiler.check_push_constant::<P>();
             }
+
+            compiler.check_ubos(
+                self.ubos
+                    .iter()
+                    .filter(|&ubo| ubo.stage.contains(shader.stage))
+                    .map(|ubo| ubo.clone())
+                    .collect(),
+            );
 
             let module = RendererBuilder::<V, P>::create_shader_module(
                 self.device.vk(),
