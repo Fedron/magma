@@ -11,12 +11,12 @@ mod shader;
 
 use pipeline::PipelineConfigInfo;
 use shader::ShaderCompiler;
-pub use shader::{NonePushConstant, PushConstant, Shader};
+pub use shader::{NonePushConstant, UniformBuffer, Shader};
 
 pub struct RendererBuilder<V, P>
 where
     V: Vertex,
-    P: PushConstant,
+    P: UniformBuffer,
 {
     device: Rc<Device>,
     pipeline_config: PipelineConfigInfo,
@@ -29,7 +29,7 @@ where
 impl<V, P: 'static> RendererBuilder<V, P>
 where
     V: Vertex,
-    P: PushConstant,
+    P: UniformBuffer,
 {
     pub fn new(device: Rc<Device>, render_pass: vk::RenderPass) -> RendererBuilder<V, P> {
         RendererBuilder {
@@ -164,7 +164,7 @@ where
 impl<V, P> RendererBuilder<V, P>
 where
     V: Vertex,
-    P: PushConstant,
+    P: UniformBuffer,
 {
     /// Creates a new Vulkan shader module from the shader file at the Path provided.
     ///
@@ -200,7 +200,7 @@ pub trait DrawRenderer {
 pub struct Renderer<V, P>
 where
     V: Vertex,
-    P: PushConstant,
+    P: UniformBuffer,
 {
     device: Rc<Device>,
     pipeline: vk::Pipeline,
@@ -213,7 +213,7 @@ where
 impl<V, P: 'static> Renderer<V, P>
 where
     V: Vertex,
-    P: PushConstant,
+    P: UniformBuffer,
 {
     pub fn builder(device: Rc<Device>, render_pass: vk::RenderPass) -> RendererBuilder<V, P> {
         RendererBuilder::new(device, render_pass)
@@ -231,7 +231,7 @@ where
 impl<V, P> DrawRenderer for Renderer<V, P>
 where
     V: Vertex,
-    P: PushConstant,
+    P: UniformBuffer,
 {
     fn draw(&self, command_buffer: vk::CommandBuffer) {
         if !self.is_none_push_constant && self.push_constant.is_none() {
@@ -289,7 +289,7 @@ where
 impl<V, P> Drop for Renderer<V, P>
 where
     V: Vertex,
-    P: PushConstant,
+    P: UniformBuffer,
 {
     fn drop(&mut self) {
         unsafe {

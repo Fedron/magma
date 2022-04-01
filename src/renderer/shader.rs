@@ -3,7 +3,7 @@ use std::fs::read_to_string;
 use ash::vk;
 use glsl::parser::Parse;
 use glsl::syntax::{ExternalDeclaration, ShaderStage};
-use magma_derive::PushConstant;
+use magma_derive::UniformBuffer;
 
 use crate::mesh::Vertex;
 
@@ -19,14 +19,14 @@ impl Shader {
     pub const FRAGMENT: vk::ShaderStageFlags = vk::ShaderStageFlags::FRAGMENT;
 }
 
-pub trait PushConstant {
+pub trait UniformBuffer {
     fn stage() -> vk::ShaderStageFlags;
     fn sizes() -> Vec<u32>;
     fn as_bytes(&self) -> &[u8];
 }
 
-#[derive(PushConstant)]
-#[push_constant(stage = "vertex")]
+#[derive(UniformBuffer)]
+#[ubo(stage = "vertex")]
 pub struct NonePushConstant;
 
 #[derive(Debug, Clone, Copy)]
@@ -172,7 +172,7 @@ impl ShaderCompiler {
 
     pub fn check_push_constant<P>(&self)
     where
-        P: PushConstant,
+        P: UniformBuffer,
     {
         for declaration in self.declarations.iter() {
             if let glsl::syntax::ExternalDeclaration::Declaration(declaration) = declaration {

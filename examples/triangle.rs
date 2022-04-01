@@ -1,5 +1,5 @@
 use magma::prelude::*;
-use magma_derive::{PushConstant, Vertex};
+use magma_derive::{UniformBuffer, Vertex};
 use memoffset::offset_of;
 
 #[derive(Vertex)]
@@ -10,8 +10,8 @@ pub struct TriangleVertex {
     color: [f32; 3],
 }
 
-#[derive(PushConstant)]
-#[push_constant(stage = "vertex")]
+#[derive(UniformBuffer)]
+#[ubo(stage = "vertex")]
 pub struct TrianglePushConstant {
     _offset: [f32; 2],
 }
