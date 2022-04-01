@@ -21,6 +21,7 @@ impl Shader {
 
 pub trait PushConstant {
     fn stage() -> vk::ShaderStageFlags;
+    fn sizes() -> Vec<u32>;
     fn as_bytes(&self) -> &[u8];
 }
 
@@ -63,7 +64,7 @@ impl ShaderCompiler {
         }
     }
 
-    pub fn check_vertex_attributes<V>(self) -> ShaderCompiler
+    pub fn check_vertex_attributes<V>(&self)
     where
         V: Vertex,
     {
@@ -167,8 +168,83 @@ impl ShaderCompiler {
                 binding, v_binding
             );
         }
+    }
 
-        self
+    pub fn check_push_constant<P>(&self)
+    where
+        P: PushConstant,
+    {
+        for declaration in self.declarations.iter() {
+            if let glsl::syntax::ExternalDeclaration::Declaration(declaration) = declaration {
+                if let glsl::syntax::Declaration::Block(block) = declaration {
+                    let qualifiers = &block.qualifier.qualifiers.0;
+                    let mut is_push_constant = false;
+                    for qualifier in qualifiers.iter() {
+                        match qualifier {
+                            glsl::syntax::TypeQualifierSpec::Layout(layout) => {
+                                for layout in layout.ids.0.iter() {
+                                    if let glsl::syntax::LayoutQualifierSpec::Identifier(name, _) =
+                                        layout
+                                    {
+                                        if name.0 == "push_constant" {
+                                            is_push_constant = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+
+                        if is_push_constant {
+                            break;
+                        }
+                    }
+
+                    if is_push_constant {
+                        let mut push_sizes: Vec<u32> = Vec::new();
+                        for field in block.fields.iter() {
+                            let vk_type = glsl_type_to_vk(&field.ty.ty);
+                            push_sizes.push(vk_type.1);
+                        }
+
+                        let push_size: u32 = push_sizes.iter().sum();
+                        if push_size > 128 {
+                            panic!(
+                            "Push constant can't be larger that 128 bytes, found size of {} bytes",
+                            push_size
+                        );
+                        }
+
+                        let mut sizes: Vec<u32> = Vec::new();
+                        for field in block.fields.iter() {
+                            sizes.push(glsl_type_to_vk(&field.ty.ty).1);
+                        }
+
+                        if P::sizes().iter().sum::<u32>() > 128 {
+                            panic!("PushConstantData struct is larger than 128 bytes which exceeds the max size");
+                        }
+
+                        if sizes.len() != P::sizes().len() {
+                            panic!("Shader push constant has more fields that provided PushConstantData struct");
+                        }
+
+                        for (index, (&size, p_size)) in sizes.iter().zip(P::sizes()).enumerate() {
+                            if size != p_size {
+                                panic!(
+                "Field {} has a different size between the PushConstantData ({}) struct and shader ({})",
+                index,
+                p_size,
+                size
+            );
+                            }
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
 

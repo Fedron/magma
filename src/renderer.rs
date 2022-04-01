@@ -63,8 +63,14 @@ where
             Vec::with_capacity(self.shaders.len());
 
         for shader in self.shaders.iter() {
+            let compiler = ShaderCompiler::new(shader.clone());
             if shader.stage == Shader::VERTEX {
-                ShaderCompiler::new(shader.clone()).check_vertex_attributes::<V>();
+                compiler.check_vertex_attributes::<V>();
+            }
+            if TypeId::of::<P>() != TypeId::of::<NonePushConstant>() {
+                if P::stage().contains(shader.stage) {
+                    compiler.check_push_constant::<P>();
+                }
             }
 
             let module = RendererBuilder::<V, P>::create_shader_module(

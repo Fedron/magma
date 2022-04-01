@@ -2,7 +2,7 @@
 
 #![recursion_limit = "128"]
 
-use darling::{usage::Options, FromDeriveInput};
+use darling::{FromDeriveInput};
 use proc_macro::TokenStream;
 
 extern crate proc_macro;
@@ -36,6 +36,8 @@ pub fn push_constant_derive(input: TokenStream) -> TokenStream {
         _ => panic!("Unsupported shader stage, must be one of ['vertex', 'fragment']"),
     };
 
+    let sizes = generate_push_sizes(&ast.data);
+
     quote! {
         impl PushConstant for #ident {
             fn as_bytes(&self) -> &[u8] {
@@ -49,9 +51,31 @@ pub fn push_constant_derive(input: TokenStream) -> TokenStream {
             fn stage() -> ash::vk::ShaderStageFlags {
                 #stage
             }
+
+            fn sizes() -> Vec<u32> {
+                #sizes
+            }
         }
     }
     .into()
+}
+
+fn generate_push_sizes(data: &syn::Data) -> proc_macro2::TokenStream {
+    let mut sizes: Vec<u32> = Vec::new();
+    match data {
+        syn::Data::Struct(data) => {
+            for field in data.fields.iter() {
+                sizes.push(get_field_size(&field));
+            }
+        }
+        _ => panic!("Unsupported type for PushConstantData"),
+    }
+
+    quote! {
+        vec![
+            #(#sizes),*
+        ]
+    }
 }
 
 /// Generates implementation for getting a [`Vertex`]'s attribute and binding descriptions.
@@ -197,5 +221,57 @@ fn get_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
             }
         }
         _ => panic!("Field {} should be an array, float or int type", field_name),
+    }
+}
+
+fn get_field_size(field: &syn::Field) -> u32 {
+    let field_name = &field.ident.as_ref().unwrap();
+    match &field.ty {
+        syn::Type::Path(path) => glam_type_to_size(
+            path.path
+                .segments
+                .first()
+                .unwrap()
+                .ident
+                .to_string()
+                .as_str(),
+        ),
+        syn::Type::Array(array) => {
+            let array_type = match &*array.elem {
+                syn::Type::Path(path) => path
+                    .path
+                    .get_ident()
+                    .expect("Failed to get ident of array")
+                    .to_string(),
+                _ => panic!("Failed too read array type on field {}", field_name),
+            };
+
+            let array_len = match &array.len {
+                syn::Expr::Lit(lit) => match &lit.lit {
+                    syn::Lit::Int(i) => i.base10_parse::<u32>().unwrap(),
+                    _ => panic!("Field {} had unexpected literal in array", field_name),
+                },
+                _ => panic!("Field {} had unexpected literal in array", field_name),
+            };
+
+            if array_type.ne("f32") {
+                panic!("Field {} must be an f32 array", field_name);
+            }
+
+            4 * array_len
+        }
+
+        _ => panic!(
+            "Field {} has an unsupported type, use glam or array types",
+            field_name
+        ),
+    }
+}
+
+fn glam_type_to_size(ty: &str) -> u32 {
+    match ty {
+        "Mat4" => 64,
+        "Vec3" => 12,
+        _ => panic!("Unsupported type"),
     }
 }
