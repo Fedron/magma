@@ -8,6 +8,8 @@ members = ["crates/*"]
 
 [dependencies]
 magma_derive = { path = "crates/magma_derive", version = "0.1.0" }
+magma_shaders = { path = "crates/magma_shaders", version = "0.1.0" }
+magma_vulkan = { path = "crates/magma_vulkan", version = "0.1.0" }
 
 [dev-dependencies]
 simple_logger = "2.1.0"
