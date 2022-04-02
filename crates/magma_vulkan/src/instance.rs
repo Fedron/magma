@@ -8,11 +8,14 @@ use ash::{
     vk, Entry,
 };
 
-use crate::utils;
+use crate::{
+    debugger::{Debugger, ENABLE_VALIDATION_LAYERS},
+    utils,
+};
 
 pub struct Instance {
     handle: ash::Instance,
-    _entry: Entry,
+    entry: Entry,
 }
 
 impl Instance {
@@ -30,9 +33,16 @@ impl Instance {
             .engine_name(&engine_name)
             .api_version(vk::make_api_version(0, 1, 2, 0));
 
+        let enabled_layer_names = if ENABLE_VALIDATION_LAYERS {
+            Debugger::validation_layers()
+        } else {
+            Vec::new()
+        };
+
         let create_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
-            .enabled_extension_names(&required_extension_names);
+            .enabled_extension_names(&required_extension_names)
+            .enabled_layer_names(&enabled_layer_names);
 
         let handle = unsafe {
             entry
@@ -40,10 +50,7 @@ impl Instance {
                 .expect("Failed to create Vulkan instance")
         };
 
-        Instance {
-            _entry: entry,
-            handle,
-        }
+        Instance { entry, handle }
     }
 
     fn check_required_extensions(entry: &Entry, required_extension_names: &[*const i8]) {
@@ -69,6 +76,16 @@ impl Instance {
             );
             panic!("Missing extensions, see above")
         }
+    }
+}
+
+impl Instance {
+    pub fn vk_handle(&self) -> &ash::Instance {
+        &self.handle
+    }
+
+    pub fn entry(&self) -> &Entry {
+        &self.entry
     }
 }
 
