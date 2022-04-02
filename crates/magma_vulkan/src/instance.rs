@@ -14,6 +14,8 @@ use crate::{
 };
 
 pub struct Instance {
+    _debugger: Option<Debugger>,
+
     handle: ash::Instance,
     entry: Entry,
 }
@@ -54,7 +56,19 @@ impl Instance {
                 .expect("Failed to create Vulkan instance")
         };
 
-        Instance { entry, handle }
+        // Create debugger
+        let debugger: Option<Debugger> = if ENABLE_VALIDATION_LAYERS {
+            log::debug!("Created Vulkan debugger");
+            Some(Debugger::new(&entry, &handle))
+        } else {
+            None
+        };
+
+        Instance {
+            entry,
+            handle,
+            _debugger: debugger,
+        }
     }
 
     fn check_required_extensions(entry: &Entry, required_extension_names: &[*const i8]) {

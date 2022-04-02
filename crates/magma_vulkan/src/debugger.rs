@@ -1,7 +1,5 @@
-use ash::{extensions::ext::DebugUtils, vk};
+use ash::{extensions::ext::DebugUtils, vk, Entry, Instance};
 use std::ffi::{c_void, CStr};
-
-use crate::instance::Instance;
 
 pub const ENABLE_VALIDATION_LAYERS: bool = cfg!(debug_assertions);
 pub const VALIDATION_LAYERS: [&'static str; 1] = ["VK_LAYER_KHRONOS_validation"];
@@ -12,10 +10,10 @@ pub struct Debugger {
 }
 
 impl Debugger {
-    pub fn new(instance: &Instance) -> Debugger {
-        Debugger::check_validation_layer_support(instance.entry());
+    pub fn new(entry: &Entry, instance: &Instance) -> Debugger {
+        Debugger::check_validation_layer_support(entry);
 
-        let debug_utils = DebugUtils::new(instance.entry(), instance.vk_handle());
+        let debug_utils = DebugUtils::new(entry, instance);
         let create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::INFO
@@ -65,6 +63,15 @@ impl Debugger {
             );
             panic!("Missing extensions, see above")
         }
+    }
+}
+
+impl Drop for Debugger {
+    fn drop(&mut self) {
+        unsafe {
+            self.debug_utils
+                .destroy_debug_utils_messenger(self.handle, None);
+        };
     }
 }
 

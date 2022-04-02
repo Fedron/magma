@@ -1,4 +1,4 @@
-use crate::{debugger::Debugger, instance::Instance, surface::Surface};
+use crate::{instance::Instance, surface::Surface};
 use ash::vk;
 
 pub struct LogicalDevice<'a> {
@@ -10,8 +10,6 @@ pub struct LogicalDevice<'a> {
     graphics_queue: vk::Queue,
     transfer_queue: vk::Queue,
     present_queue: vk::Queue,
-
-    debugger: Option<Debugger>,
 }
 
 pub struct PhysicalDevice {
