@@ -1,4 +1,8 @@
-use std::{collections::HashSet, ffi::CStr, os::raw::c_char};
+use std::{
+    collections::HashSet,
+    ffi::{CStr, CString},
+    os::raw::c_char,
+};
 
 /// Converts a char array to a String
 pub fn char_array_to_string(raw_string_array: &[c_char]) -> String {
@@ -20,6 +24,11 @@ pub fn char_ptr_to_string(string_ptr: *const i8) -> String {
         .to_owned()
 }
 
+pub fn str_to_char_ptr(string: &str) -> *const i8 {
+    let c_str = CString::new(string).unwrap();
+    c_str.as_ptr()
+}
+
 /// Checks whether a vector contains all of the required vector
 ///
 /// Returns whether `to_check` contains all of required, and a vector of the missing items
@@ -32,10 +41,6 @@ pub fn contains_required(to_check: &Vec<String>, required: &Vec<String>) -> (boo
         .collect::<Vec<String>>();
 
     if missing_required.len() > 0 {
-        log::error!(
-            "Your device is missing required features: {:?}",
-            missing_required
-        );
         return (true, missing_required);
     }
 

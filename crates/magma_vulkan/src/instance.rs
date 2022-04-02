@@ -9,7 +9,7 @@ use ash::{
 };
 
 use crate::{
-    debugger::{Debugger, ENABLE_VALIDATION_LAYERS},
+    debugger::{Debugger, ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
     utils,
 };
 
@@ -34,7 +34,11 @@ impl Instance {
             .api_version(vk::make_api_version(0, 1, 2, 0));
 
         let enabled_layer_names = if ENABLE_VALIDATION_LAYERS {
-            Debugger::validation_layers()
+            Debugger::check_validation_layer_support(&entry);
+            VALIDATION_LAYERS
+                .iter()
+                .map(|&string| string.as_ptr() as *const i8)
+                .collect::<Vec<*const i8>>()
         } else {
             Vec::new()
         };

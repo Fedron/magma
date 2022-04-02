@@ -4,6 +4,7 @@ use std::ffi::{c_void, CStr};
 use crate::instance::Instance;
 
 pub const ENABLE_VALIDATION_LAYERS: bool = cfg!(debug_assertions);
+pub const VALIDATION_LAYERS: [&'static str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 pub struct Debugger {
     handle: vk::DebugUtilsMessengerEXT,
@@ -38,8 +39,10 @@ impl Debugger {
             debug_utils,
         }
     }
+}
 
-    fn check_validation_layer_support(entry: &ash::Entry) {
+impl Debugger {
+    pub fn check_validation_layer_support(entry: &ash::Entry) {
         let supported_layers = entry
             .enumerate_instance_layer_properties()
             .expect("Failed to get instance layer properties");
@@ -49,9 +52,9 @@ impl Debugger {
                 .iter()
                 .map(|layer| crate::utils::char_array_to_string(&layer.layer_name))
                 .collect::<Vec<String>>(),
-            &Debugger::validation_layers()
+            &VALIDATION_LAYERS
                 .iter()
-                .map(|&layer| unsafe { layer.as_ref() }.unwrap().to_string())
+                .map(|&layer| String::from(layer))
                 .collect::<Vec<String>>(),
         );
 
@@ -62,12 +65,6 @@ impl Debugger {
             );
             panic!("Missing extensions, see above")
         }
-    }
-}
-
-impl Debugger {
-    pub fn validation_layers() -> Vec<*const i8> {
-        vec!["VK_LAYER_KHRONOS_validation".as_ptr() as *const i8]
     }
 }
 
