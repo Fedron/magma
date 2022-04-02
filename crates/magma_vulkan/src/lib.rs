@@ -1,7 +1,10 @@
+extern crate log;
+
+mod debugger;
 mod device;
 mod instance;
 mod surface;
-mod debugger;
+mod utils;
 
 pub mod prelude {
     pub use crate::device::{LogicalDevice, PhysicalDevice};
