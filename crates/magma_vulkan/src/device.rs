@@ -1,5 +1,5 @@
 use crate::{
-    debugger::{ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
+    debugger::{Debugger, ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
     instance::Instance,
     surface::Surface,
     utils,
@@ -13,6 +13,7 @@ pub struct LogicalDevice {
     present_queue: vk::Queue,
     transfer_queue: vk::Queue,
 
+    debugger: Option<Debugger>,
     physical_device: PhysicalDevice,
     surface: Surface,
     instance: Instance,
@@ -83,11 +84,20 @@ impl LogicalDevice {
             unsafe { handle.get_device_queue(physical_device.indices.present_family.unwrap(), 0) };
         let transfer_queue =
             unsafe { handle.get_device_queue(physical_device.indices.transfer_family.unwrap(), 0) };
+
+        let debugger: Option<Debugger> = if ENABLE_VALIDATION_LAYERS {
+            log::debug!("Created Vulkan debugger");
+            Some(Debugger::new(instance.entry(), instance.vk_handle()))
+        } else {
+            None
+        };
+
         LogicalDevice {
             handle,
             physical_device,
             instance,
 
+            debugger,
             surface,
             graphics_queue,
             present_queue,
