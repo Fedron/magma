@@ -1,17 +1,107 @@
-use crate::{instance::Instance, surface::Surface, utils};
+use crate::{
+    debugger::{ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
+    instance::Instance,
+    surface::Surface,
+    utils,
+};
 use ash::vk;
 
 const DEVICE_EXTENSIONS: [&'static str; 1] = ["VK_KHR_swapchain"];
 
-pub struct LogicalDevice<'a> {
-    handle: vk::Device,
-    physical_device: &'a PhysicalDevice,
-    instance: &'a Instance,
-
-    surface: Surface,
+pub struct LogicalDevice {
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
     transfer_queue: vk::Queue,
+
+    physical_device: PhysicalDevice,
+    surface: Surface,
+    instance: Instance,
+    handle: ash::Device,
+}
+
+impl LogicalDevice {
+    pub fn new(
+        instance: Instance,
+        surface: Surface,
+        physical_device: PhysicalDevice,
+    ) -> LogicalDevice {
+        use std::collections::HashSet;
+        use std::ffi::CString;
+
+        let mut unique_queue_families = HashSet::new();
+        unique_queue_families.insert(physical_device.indices.graphics_family.unwrap());
+        unique_queue_families.insert(physical_device.indices.present_family.unwrap());
+        unique_queue_families.insert(physical_device.indices.transfer_family.unwrap());
+
+        let queue_priorities = [1.0_f32];
+        let mut queue_infos: Vec<vk::DeviceQueueCreateInfo> = Vec::new();
+        for &queue_family in unique_queue_families.iter() {
+            queue_infos.push(
+                vk::DeviceQueueCreateInfo::builder()
+                    .queue_family_index(queue_family)
+                    .queue_priorities(&queue_priorities)
+                    .build(),
+            );
+        }
+
+        let required_validation_layers: Vec<*const i8> = if ENABLE_VALIDATION_LAYERS {
+            VALIDATION_LAYERS
+                .iter()
+                .map(|layer| layer.as_ptr() as *const i8)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let device_extension_names_cstring: Vec<CString> = DEVICE_EXTENSIONS
+            .iter()
+            .map(|&extension| CString::new(extension).unwrap())
+            .collect();
+
+        let device_extension_names_ptr: Vec<*const i8> = device_extension_names_cstring
+            .iter()
+            .map(|t| t.as_ptr())
+            .collect();
+
+        let create_info = vk::DeviceCreateInfo::builder()
+            .queue_create_infos(&queue_infos)
+            .enabled_features(&physical_device.features)
+            .enabled_layer_names(&required_validation_layers)
+            .enabled_extension_names(&device_extension_names_ptr)
+            .build();
+
+        let handle = unsafe {
+            instance
+                .vk_handle()
+                .create_device(physical_device.vk_handle(), &create_info, None)
+                .expect("Failed to create Vulkan logical device")
+        };
+
+        let graphics_queue =
+            unsafe { handle.get_device_queue(physical_device.indices.graphics_family.unwrap(), 0) };
+        let present_queue =
+            unsafe { handle.get_device_queue(physical_device.indices.present_family.unwrap(), 0) };
+        let transfer_queue =
+            unsafe { handle.get_device_queue(physical_device.indices.transfer_family.unwrap(), 0) };
+        LogicalDevice {
+            handle,
+            physical_device,
+            instance,
+
+            surface,
+            graphics_queue,
+            present_queue,
+            transfer_queue,
+        }
+    }
+}
+
+impl Drop for LogicalDevice {
+    fn drop(&mut self) {
+        unsafe {
+            self.handle.destroy_device(None);
+        };
+    }
 }
 
 pub struct QueueFamilyIndices {
@@ -37,6 +127,7 @@ pub struct SwapchainSupportInfo {
 pub struct PhysicalDevice {
     handle: vk::PhysicalDevice,
 
+    indices: QueueFamilyIndices,
     properties: vk::PhysicalDeviceProperties,
     features: vk::PhysicalDeviceFeatures,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
@@ -45,6 +136,7 @@ pub struct PhysicalDevice {
 impl PhysicalDevice {
     pub fn new(instance: &ash::Instance, surface: &Surface) -> PhysicalDevice {
         let handle = PhysicalDevice::pick_device(instance, surface);
+        let indices = PhysicalDevice::find_queue_family(instance, handle, surface);
         let properties = unsafe { instance.get_physical_device_properties(handle) };
         let features = unsafe { instance.get_physical_device_features(handle) };
         let memory_properties = unsafe { instance.get_physical_device_memory_properties(handle) };
@@ -63,6 +155,8 @@ impl PhysicalDevice {
 
         PhysicalDevice {
             handle,
+
+            indices,
             properties,
             features,
             memory_properties,

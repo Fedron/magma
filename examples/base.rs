@@ -15,5 +15,6 @@ fn main() {
         .expect("Failed to create winit window");
 
     let surface = Surface::new(&instance, &window);
-    let _physical_device = PhysicalDevice::new(instance.vk_handle(), &surface);
+    let physical_device = PhysicalDevice::new(instance.vk_handle(), &surface);
+    let _logical_device = LogicalDevice::new(instance, surface, physical_device);
 }

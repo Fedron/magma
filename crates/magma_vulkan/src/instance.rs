@@ -115,3 +115,11 @@ impl Instance {
         &self.entry
     }
 }
+
+impl Drop for Instance {
+    fn drop(&mut self) {
+        unsafe {
+            self.handle.destroy_instance(None);
+        };
+    }
+}
