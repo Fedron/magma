@@ -25,7 +25,8 @@ pub struct Swapchain {
     depth_image_memories: Vec<vk::DeviceMemory>,
     depth_image_views: Vec<vk::ImageView>,
 
-    format: vk::Format,
+    color_format: vk::Format,
+    depth_format: vk::Format,
     extent: vk::Extent2D,
 }
 
@@ -46,6 +47,8 @@ impl Swapchain {
                 vk_swapchain.extent,
             );
 
+        let depth_format = Swapchain::find_depth_format(logical_device.as_ref());
+
         Swapchain {
             handle: vk_swapchain.handle,
             device: logical_device,
@@ -58,7 +61,8 @@ impl Swapchain {
             depth_image_memories,
             depth_image_views,
 
-            format: vk_swapchain.format,
+            color_format: vk_swapchain.format,
+            depth_format,
             extent: vk_swapchain.extent,
         }
     }
@@ -339,6 +343,28 @@ impl Swapchain {
             vk::ImageTiling::OPTIMAL,
             vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
         )
+    }
+}
+
+impl Swapchain {
+    pub fn vk_handle(&self) -> vk::SwapchainKHR {
+        self.handle
+    }
+
+    pub fn images(&self) -> &[vk::Image] {
+        &self.images
+    }
+
+    pub fn color_format(&self) -> &vk::Format {
+        &self.color_format
+    }
+
+    pub fn depth_format(&self) -> &vk::Format {
+        &self.depth_format
+    }
+
+    pub fn extent(&self) -> &vk::Extent2D {
+        &self.extent
     }
 }
 

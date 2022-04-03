@@ -25,9 +25,14 @@ fn main() {
     let surface = Surface::new(&instance, &window);
     let physical_device = PhysicalDevice::new(instance.vk_handle(), &surface);
     let logical_device = Rc::new(LogicalDevice::new(instance, surface, physical_device));
-    let _swapchain = Swapchain::new(logical_device.clone());
+    let swapchain = Swapchain::new(logical_device.clone());
+    let _render_pass = RenderPass::new(
+        logical_device.clone(),
+        swapchain.color_format(),
+        swapchain.depth_format(),
+    );
 
-    let (images_available_semaphores, render_finished_semaphores, in_flight_fences) = {
+    let (_images_available_semaphores, _render_finished_semaphores, _in_flight_fences) = {
         let mut sync_objects = (Vec::new(), Vec::new(), Vec::new());
 
         for _ in 0..FRAMES_IN_FLIGHT {
