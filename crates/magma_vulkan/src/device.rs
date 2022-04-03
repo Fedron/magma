@@ -13,7 +13,7 @@ pub struct LogicalDevice {
     present_queue: vk::Queue,
     transfer_queue: vk::Queue,
 
-    debugger: Option<Debugger>,
+    _debugger: Option<Debugger>,
     physical_device: PhysicalDevice,
     surface: Surface,
     instance: Instance,
@@ -97,12 +97,42 @@ impl LogicalDevice {
             physical_device,
             instance,
 
-            debugger,
+            _debugger: debugger,
             surface,
             graphics_queue,
             present_queue,
             transfer_queue,
         }
+    }
+}
+
+impl LogicalDevice {
+    pub fn vk_handle(&self) -> &ash::Device {
+        &self.handle
+    }
+
+    pub fn instance(&self) -> &Instance {
+        &self.instance
+    }
+
+    pub fn surface(&self) -> &Surface {
+        &self.surface
+    }
+
+    pub fn physical_device(&self) -> &PhysicalDevice {
+        &self.physical_device
+    }
+
+    pub fn graphics_queue(&self) -> vk::Queue {
+        self.graphics_queue
+    }
+
+    pub fn present_queue(&self) -> vk::Queue {
+        self.present_queue
+    }
+
+    pub fn transfer_queue(&self) -> vk::Queue {
+        self.transfer_queue
     }
 }
 
