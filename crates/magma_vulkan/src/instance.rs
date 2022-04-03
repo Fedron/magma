@@ -25,7 +25,7 @@ impl Instance {
         let entry = unsafe { ash::Entry::load().expect("Failed to lead Vulkan library") };
 
         // Create vulkan instance
-        let required_extension_names = required_extension_names();
+        let required_extension_names = Instance::required_extension_names();
         Instance::check_required_extensions(&entry, &required_extension_names);
 
         let app_name = CString::new("Magma App").unwrap();
@@ -95,6 +95,15 @@ impl Instance {
             panic!("Missing extensions, see above")
         }
     }
+
+    #[cfg(all(windows))]
+    fn required_extension_names() -> Vec<*const i8> {
+        vec![
+            Surface::name().as_ptr(),
+            Win32Surface::name().as_ptr(),
+            DebugUtils::name().as_ptr(),
+        ]
+    }
 }
 
 impl Instance {
@@ -105,13 +114,4 @@ impl Instance {
     pub fn entry(&self) -> &Entry {
         &self.entry
     }
-}
-
-#[cfg(all(windows))]
-fn required_extension_names() -> Vec<*const i8> {
-    vec![
-        Surface::name().as_ptr(),
-        Win32Surface::name().as_ptr(),
-        DebugUtils::name().as_ptr(),
-    ]
 }
