@@ -136,6 +136,90 @@ impl LogicalDevice {
     }
 }
 
+impl LogicalDevice {
+    pub fn find_memory_type(
+        &self,
+        type_filter: u32,
+        required_properties: vk::MemoryPropertyFlags,
+    ) -> u32 {
+        for (i, memory_type) in self
+            .physical_device
+            .memory_properties
+            .memory_types
+            .iter()
+            .enumerate()
+        {
+            if (type_filter & (1 << i)) > 0
+                && memory_type.property_flags.contains(required_properties)
+            {
+                return i as u32;
+            }
+        }
+
+        panic!("Failed to find a suitable memory type")
+    }
+
+    pub fn find_supported_format(
+        &self,
+        candidates: &[vk::Format],
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> vk::Format {
+        for &format in candidates.iter() {
+            let properties = unsafe {
+                self.instance
+                    .vk_handle()
+                    .get_physical_device_format_properties(self.physical_device.vk_handle(), format)
+            };
+
+            if tiling == vk::ImageTiling::LINEAR
+                && properties.linear_tiling_features.contains(features)
+            {
+                return format;
+            } else if tiling == vk::ImageTiling::OPTIMAL
+                && properties.optimal_tiling_features.contains(features)
+            {
+                return format;
+            }
+        }
+
+        panic!("Failed to find a suitable format");
+    }
+
+    pub fn create_image(
+        &self,
+        create_info: &vk::ImageCreateInfo,
+        memory_properties: vk::MemoryPropertyFlags,
+    ) -> (vk::Image, vk::DeviceMemory) {
+        let image = unsafe {
+            self.handle
+                .create_image(create_info, None)
+                .expect("Failed to create image")
+        };
+
+        let memory_requirements = unsafe { self.handle.get_image_memory_requirements(image) };
+        let allocate_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(memory_requirements.size)
+            .memory_type_index(
+                self.find_memory_type(memory_requirements.memory_type_bits, memory_properties),
+            );
+
+        let device_memory = unsafe {
+            self.handle
+                .allocate_memory(&allocate_info, None)
+                .expect("Failed to allocate device memory")
+        };
+
+        unsafe {
+            self.handle
+                .bind_image_memory(image, device_memory, 0)
+                .expect("Failed to bind device memory to image")
+        };
+
+        (image, device_memory)
+    }
+}
+
 impl Drop for LogicalDevice {
     fn drop(&mut self) {
         unsafe {
@@ -168,6 +252,8 @@ pub struct PhysicalDevice {
     handle: vk::PhysicalDevice,
 
     indices: QueueFamilyIndices,
+    swapchain_support: SwapchainSupportInfo,
+
     properties: vk::PhysicalDeviceProperties,
     features: vk::PhysicalDeviceFeatures,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
@@ -176,7 +262,10 @@ pub struct PhysicalDevice {
 impl PhysicalDevice {
     pub fn new(instance: &ash::Instance, surface: &Surface) -> PhysicalDevice {
         let handle = PhysicalDevice::pick_device(instance, surface);
+
         let indices = PhysicalDevice::find_queue_family(instance, handle, surface);
+        let swapchain_support = PhysicalDevice::query_swapchain_support(handle, surface);
+
         let properties = unsafe { instance.get_physical_device_properties(handle) };
         let features = unsafe { instance.get_physical_device_features(handle) };
         let memory_properties = unsafe { instance.get_physical_device_memory_properties(handle) };
@@ -197,6 +286,8 @@ impl PhysicalDevice {
             handle,
 
             indices,
+            swapchain_support,
+
             properties,
             features,
             memory_properties,
@@ -347,6 +438,14 @@ impl PhysicalDevice {
 impl PhysicalDevice {
     pub fn vk_handle(&self) -> vk::PhysicalDevice {
         self.handle
+    }
+
+    pub fn indices(&self) -> &QueueFamilyIndices {
+        &self.indices
+    }
+
+    pub fn swapchain_support(&self) -> &SwapchainSupportInfo {
+        &self.swapchain_support
     }
 
     pub fn properties(&self) -> &vk::PhysicalDeviceProperties {
