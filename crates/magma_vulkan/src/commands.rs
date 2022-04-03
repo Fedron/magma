@@ -68,6 +68,14 @@ impl CommandPool {
     pub fn vk_handle(&self) -> vk::CommandPool {
         self.handle
     }
+
+    pub fn buffers(&self) -> &[CommandBuffer] {
+        &self.buffers
+    }
+
+    pub fn buffers_mut(&mut self) -> &mut [CommandBuffer] {
+        &mut self.buffers
+    }
 }
 
 impl CommandPool {
@@ -166,7 +174,7 @@ impl CommandBuffer {
 }
 
 impl CommandBuffer {
-    pub fn start_recording(&mut self, usage: CommandBufferUsageFlags) {
+    pub fn begin(&mut self, usage: CommandBufferUsageFlags) {
         if self.is_recording {
             panic!("Buffer is already recording, cannot start recording again. Please finish recording first");
         }
@@ -244,7 +252,7 @@ impl CommandBuffer {
         };
     }
 
-    pub fn end_recording(&mut self) {
+    pub fn end(&mut self) {
         if !self.is_recording {
             panic!("Cannot end recording a buffer that never started recording");
         }

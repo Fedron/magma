@@ -137,6 +137,14 @@ impl LogicalDevice {
 }
 
 impl LogicalDevice {
+    pub fn wait_for_idle(&self) {
+        unsafe {
+            self.handle
+                .device_wait_idle()
+                .expect("Failed to wait for device to idle");
+        };
+    }
+
     pub fn find_memory_type(
         &self,
         type_filter: u32,
