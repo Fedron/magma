@@ -19,5 +19,16 @@ fn main() {
     let surface = Surface::new(&instance, &window);
     let physical_device = PhysicalDevice::new(instance.vk_handle(), &surface);
     let logical_device = Rc::new(LogicalDevice::new(instance, surface, physical_device));
-    let _swapchain = Swapchain::new(logical_device);
+    let _swapchain = Swapchain::new(logical_device.clone());
+
+    let mut command_pool = CommandPool::new(
+        logical_device.clone(),
+        CommandPoolFlags::TRANSIENT | CommandPoolFlags::RESETTABLE,
+        logical_device
+            .physical_device()
+            .indices()
+            .graphics_family
+            .unwrap(),
+    );
+    command_pool.allocate_buffers(2, CommandBufferLevel::Primary);
 }
