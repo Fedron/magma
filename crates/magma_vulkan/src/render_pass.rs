@@ -5,6 +5,7 @@ use crate::device::LogicalDevice;
 
 pub struct RenderPass {
     device: Rc<LogicalDevice>,
+    
     handle: vk::RenderPass,
 }
 

@@ -3,6 +3,7 @@ extern crate log;
 mod commands;
 mod debugger;
 mod device;
+mod framebuffer;
 mod instance;
 mod render_pass;
 mod surface;
@@ -15,6 +16,7 @@ pub mod prelude {
         CommandBufferLevel, CommandBufferUsageFlags, CommandPool, CommandPoolFlags,
     };
     pub use crate::device::{LogicalDevice, PhysicalDevice};
+    pub use crate::framebuffer::Framebuffer;
     pub use crate::instance::Instance;
     pub use crate::render_pass::RenderPass;
     pub use crate::surface::Surface;

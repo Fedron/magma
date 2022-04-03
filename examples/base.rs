@@ -26,11 +26,24 @@ fn main() {
     let physical_device = PhysicalDevice::new(instance.vk_handle(), &surface);
     let logical_device = Rc::new(LogicalDevice::new(instance, surface, physical_device));
     let swapchain = Swapchain::new(logical_device.clone());
-    let _render_pass = RenderPass::new(
+    let render_pass = RenderPass::new(
         logical_device.clone(),
         swapchain.color_format(),
         swapchain.depth_format(),
     );
+
+    let _framebuffers = {
+        let mut framebuffers: Vec<Framebuffer> = Vec::new();
+        for image_view in swapchain.image_views() {
+            framebuffers.push(Framebuffer::new(
+                logical_device.clone(),
+                render_pass.vk_handle(),
+                image_view,
+                swapchain.extent(),
+            ));
+        }
+        framebuffers
+    };
 
     let (_images_available_semaphores, _render_finished_semaphores, _in_flight_fences) = {
         let mut sync_objects = (Vec::new(), Vec::new(), Vec::new());

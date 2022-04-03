@@ -355,6 +355,10 @@ impl Swapchain {
         &self.images
     }
 
+    pub fn image_views(&self) -> &[vk::ImageView] {
+        &self.image_views
+    }
+
     pub fn color_format(&self) -> &vk::Format {
         &self.color_format
     }
