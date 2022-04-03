@@ -42,6 +42,10 @@ impl Surface {
     pub fn vk_handle(&self) -> vk::SurfaceKHR {
         self.handle
     }
+
+    pub fn surface(&self) -> &ash::extensions::khr::Surface {
+        &self.surface
+    }
 }
 
 impl Drop for Surface {
