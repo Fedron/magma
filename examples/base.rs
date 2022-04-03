@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use magma::prelude::*;
 use winit::{event_loop::EventLoop, window::WindowBuilder};
 
@@ -16,5 +18,6 @@ fn main() {
 
     let surface = Surface::new(&instance, &window);
     let physical_device = PhysicalDevice::new(instance.vk_handle(), &surface);
-    let _logical_device = LogicalDevice::new(instance, surface, physical_device);
+    let logical_device = Rc::new(LogicalDevice::new(instance, surface, physical_device));
+    let _swapchain = Swapchain::new(logical_device);
 }

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ash::vk;
 
 use crate::device::LogicalDevice;
@@ -13,6 +15,7 @@ struct VulkanSwapchain {
 
 pub struct Swapchain {
     handle: vk::SwapchainKHR,
+    device: Rc<LogicalDevice>,
     swapchain: ash::extensions::khr::Swapchain,
 
     render_pass: vk::RenderPass,
@@ -27,9 +30,10 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(logical_device: &LogicalDevice) -> Swapchain {
-        let vk_swapchain = Swapchain::create_swapchain(logical_device, None);
-        let render_pass = Swapchain::create_render_pass(logical_device, vk_swapchain.format);
+    pub fn new(logical_device: Rc<LogicalDevice>) -> Swapchain {
+        let vk_swapchain = Swapchain::create_swapchain(logical_device.as_ref(), None);
+        let render_pass =
+            Swapchain::create_render_pass(logical_device.as_ref(), vk_swapchain.format);
         let image_views = Swapchain::create_image_views(
             logical_device.vk_handle(),
             vk_swapchain.format,
@@ -37,13 +41,14 @@ impl Swapchain {
         );
         let (depth_images, depth_image_memories, depth_image_views) =
             Swapchain::create_depth_resources(
-                logical_device,
+                logical_device.as_ref(),
                 image_views.len(),
                 vk_swapchain.extent,
             );
 
         Swapchain {
             handle: vk_swapchain.handle,
+            device: logical_device,
             swapchain: vk_swapchain.swapchain,
 
             render_pass,
@@ -334,5 +339,33 @@ impl Swapchain {
             vk::ImageTiling::OPTIMAL,
             vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
         )
+    }
+}
+
+impl Drop for Swapchain {
+    fn drop(&mut self) {
+        unsafe {
+            for &image_view in self.image_views.iter() {
+                self.device.vk_handle().destroy_image_view(image_view, None);
+            }
+
+            self.swapchain.destroy_swapchain(self.handle, None);
+
+            for i in 0..self.depth_images.len() {
+                self.device
+                    .vk_handle()
+                    .destroy_image_view(*self.depth_image_views.get(i).unwrap(), None);
+                self.device
+                    .vk_handle()
+                    .destroy_image(*self.depth_images.get(i).unwrap(), None);
+                self.device
+                    .vk_handle()
+                    .free_memory(*self.depth_image_memories.get(i).unwrap(), None);
+            }
+
+            self.device
+                .vk_handle()
+                .destroy_render_pass(self.render_pass, None);
+        };
     }
 }
