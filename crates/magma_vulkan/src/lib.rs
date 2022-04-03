@@ -6,6 +6,7 @@ mod device;
 mod instance;
 mod surface;
 mod swapchain;
+mod sync;
 mod utils;
 
 pub mod prelude {
@@ -14,4 +15,5 @@ pub mod prelude {
     pub use crate::instance::Instance;
     pub use crate::surface::Surface;
     pub use crate::swapchain::Swapchain;
+    pub use crate::sync::{Fence, Semaphore};
 }

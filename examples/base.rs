@@ -3,6 +3,8 @@ use std::rc::Rc;
 use magma::prelude::*;
 use winit::{event_loop::EventLoop, window::WindowBuilder};
 
+const FRAMES_IN_FLIGHT: usize = 2;
+
 fn main() {
     simple_logger::SimpleLogger::new()
         .without_timestamps()
@@ -21,6 +23,18 @@ fn main() {
     let logical_device = Rc::new(LogicalDevice::new(instance, surface, physical_device));
     let _swapchain = Swapchain::new(logical_device.clone());
 
+    let (images_available_semaphores, render_finished_semaphores, in_flight_fences) = {
+        let mut sync_objects = (Vec::new(), Vec::new(), Vec::new());
+
+        for _ in 0..FRAMES_IN_FLIGHT {
+            sync_objects.0.push(Semaphore::new(logical_device.clone()));
+            sync_objects.1.push(Semaphore::new(logical_device.clone()));
+            sync_objects.2.push(Fence::new(logical_device.clone()));
+        }
+
+        sync_objects
+    };
+
     let mut command_pool = CommandPool::new(
         logical_device.clone(),
         CommandPoolFlags::TRANSIENT | CommandPoolFlags::RESETTABLE,
@@ -30,5 +44,5 @@ fn main() {
             .graphics_family
             .unwrap(),
     );
-    command_pool.allocate_buffers(2, CommandBufferLevel::Primary);
+    command_pool.allocate_buffers(FRAMES_IN_FLIGHT as u32, CommandBufferLevel::Primary);
 }
