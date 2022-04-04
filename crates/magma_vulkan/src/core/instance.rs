@@ -5,18 +5,31 @@ use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
 use ash::vk;
 
-use crate::utils;
+use crate::{utils, VulkanError};
+
+#[derive(thiserror::Error, Debug)]
+pub enum InstanceError {
+    #[error(transparent)]
+    LoadLibraryError(#[from] ash::LoadingError),
+    #[error("Creating instance failed")]
+    CreateError(VulkanError),
+    #[error("Missing required extensions")]
+    MissingExtensions(Vec<String>),
+    #[error(transparent)]
+    Other(VulkanError),
+}
 
 pub struct Instance {
-    entry: ash::Entry,
     handle: ash::Instance,
+    entry: ash::Entry,
 }
 
 impl Instance {
-    pub fn new() -> Instance {
-        let entry = unsafe { ash::Entry::load().expect("Failed to load Vulkan library") };
+    pub fn new() -> Result<Instance, InstanceError> {
+        let entry =
+            unsafe { ash::Entry::load().map_err(|err| InstanceError::LoadLibraryError(err))? };
 
-        Instance::check_required_extensions(&entry);
+        Instance::check_required_extensions(&entry)?;
 
         use std::ffi::CString;
         let app_name = CString::new("Magma").unwrap();
@@ -33,16 +46,16 @@ impl Instance {
         let handle = unsafe {
             entry
                 .create_instance(&create_info, None)
-                .expect("Failed to create Vulkan instance")
+                .map_err(|err| InstanceError::CreateError(err.into()))?
         };
 
-        Instance { entry, handle }
+        Ok(Instance { entry, handle })
     }
 
-    fn check_required_extensions(entry: &ash::Entry) {
+    fn check_required_extensions(entry: &ash::Entry) -> Result<(), InstanceError> {
         let supported_extension_names = entry
             .enumerate_instance_extension_properties(None)
-            .expect("Failed to get instance extension properties");
+            .map_err(|err| InstanceError::Other(err.into()))?;
 
         let is_missing_extensions = utils::contains_required(
             &supported_extension_names
@@ -60,7 +73,9 @@ impl Instance {
                 "Your device is missing required extensions: {:?}",
                 is_missing_extensions.1
             );
-            panic!("Missing extensions, see above")
+            Err(InstanceError::MissingExtensions(is_missing_extensions.1))
+        } else {
+            Ok(())
         }
     }
 

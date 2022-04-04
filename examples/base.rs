@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use magma::prelude::*;
 use winit::{
     event::{Event, WindowEvent},
@@ -5,7 +7,7 @@ use winit::{
     window::WindowBuilder,
 };
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     simple_logger::SimpleLogger::new()
         .without_timestamps()
         .init()
@@ -17,7 +19,7 @@ fn main() {
         .build(&event_loop)
         .expect("Failed to create window");
 
-    let _instance = Instance::new();
+    let _instance = Instance::new()?;
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
@@ -25,5 +27,5 @@ fn main() {
             _ => {}
         },
         _ => {}
-    })
+    });
 }
