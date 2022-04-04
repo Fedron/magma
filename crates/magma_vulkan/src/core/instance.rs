@@ -5,21 +5,28 @@ use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
 use ash::vk;
 
-use crate::{utils, VulkanError};
+use super::debugger::{Debugger, DebuggerError};
+use crate::{
+    core::debugger::{ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
+    utils, VulkanError,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum InstanceError {
     #[error(transparent)]
     LoadLibraryError(#[from] ash::LoadingError),
     #[error("Creating instance failed")]
-    CreateError(VulkanError),
+    CantCreate(VulkanError),
     #[error("Missing required extensions")]
     MissingExtensions(Vec<String>),
+    #[error(transparent)]
+    CantCreateDebugger(#[from] DebuggerError),
     #[error(transparent)]
     Other(VulkanError),
 }
 
 pub struct Instance {
+    debugger: Option<Debugger>,
     handle: ash::Instance,
     entry: ash::Entry,
 }
@@ -30,6 +37,9 @@ impl Instance {
             unsafe { ash::Entry::load().map_err(|err| InstanceError::LoadLibraryError(err))? };
 
         Instance::check_required_extensions(&entry)?;
+        if ENABLE_VALIDATION_LAYERS {
+            Debugger::check_validation_layers(&entry)?;
+        }
 
         use std::ffi::CString;
         let app_name = CString::new("Magma").unwrap();
@@ -39,17 +49,38 @@ impl Instance {
             .engine_name(&engine_name);
 
         let enabled_extension_names = Instance::required_extension_names();
+        let enabled_layer_names = if ENABLE_VALIDATION_LAYERS {
+            VALIDATION_LAYERS
+                .iter()
+                .map(|layer| layer.as_ptr() as *const i8)
+                .collect::<Vec<*const i8>>()
+        } else {
+            Vec::new()
+        };
+
         let create_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
-            .enabled_extension_names(&enabled_extension_names);
+            .enabled_extension_names(&enabled_extension_names)
+            .enabled_layer_names(&enabled_layer_names);
 
         let handle = unsafe {
             entry
                 .create_instance(&create_info, None)
-                .map_err(|err| InstanceError::CreateError(err.into()))?
+                .map_err(|err| InstanceError::CantCreate(err.into()))?
         };
 
-        Ok(Instance { entry, handle })
+        let debugger: Option<Debugger> = if ENABLE_VALIDATION_LAYERS {
+            log::debug!("Created Vulkan debugger");
+            Some(Debugger::new(&entry, &handle)?)
+        } else {
+            None
+        };
+
+        Ok(Instance {
+            debugger,
+            entry,
+            handle,
+        })
     }
 
     fn check_required_extensions(entry: &ash::Entry) -> Result<(), InstanceError> {
