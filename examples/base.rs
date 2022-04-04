@@ -17,6 +17,8 @@ fn main() {
         .build(&event_loop)
         .expect("Failed to create window");
 
+    let _instance = Instance::new();
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
             WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,

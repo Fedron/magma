@@ -1,3 +1,8 @@
 extern crate log;
 
-pub mod prelude {}
+mod core;
+mod utils;
+
+pub mod prelude {
+    pub use crate::core::instance::Instance;
+}
