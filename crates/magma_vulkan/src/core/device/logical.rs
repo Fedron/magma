@@ -31,7 +31,6 @@ impl LogicalDevice {
         physical_device: PhysicalDevice,
     ) -> Result<LogicalDevice, LogicalDeviceError> {
         use std::collections::HashSet;
-        use std::ffi::CStr;
 
         let mut unique_queue_indices = HashSet::new();
         for queue_family in physical_device.queue_families().iter() {
@@ -59,7 +58,7 @@ impl LogicalDevice {
         };
 
         let device_extensions: Vec<CString> = physical_device
-            .extensions()
+            .enabled_extensions()
             .iter()
             .map(|extension| CString::new(extension.to_string()).expect("Failed to create CString"))
             .collect();

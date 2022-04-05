@@ -31,6 +31,7 @@ pub enum PhysicalDeviceType {
 
 pub struct PhysicalDeviceBuilder {
     queue_families: Vec<QueueFamily>,
+    // FIXME: Not being taken into account
     preferred_type: PhysicalDeviceType,
     device_extensions: Vec<DeviceExtension>,
 }
@@ -126,16 +127,16 @@ impl PhysicalDeviceBuilder {
         instance: &Instance,
         device: vk::PhysicalDevice,
     ) -> Result<bool, PhysicalDeviceError> {
-        PhysicalDeviceBuilder::find_queue_families(instance, device, &mut self.queue_families)?;
+        self.find_queue_families(instance, device)?;
         self.check_device_extension_support(instance, device)?;
 
         Ok(true)
     }
 
     fn find_queue_families(
+        &mut self,
         instance: &Instance,
         device: vk::PhysicalDevice,
-        queue_families: &mut [QueueFamily],
     ) -> Result<(), PhysicalDeviceError> {
         let device_queue_families = unsafe {
             instance
@@ -143,7 +144,7 @@ impl PhysicalDeviceBuilder {
                 .get_physical_device_queue_family_properties(device)
         };
 
-        for queue_family in queue_families.iter_mut() {
+        for queue_family in self.queue_families.iter_mut() {
             for (index, device_queue_family) in device_queue_families.iter().enumerate() {
                 if device_queue_family.queue_count > 0
                     && device_queue_family
@@ -156,7 +157,11 @@ impl PhysicalDeviceBuilder {
             }
         }
 
-        if let Some(_) = queue_families.iter().find(|family| family.index.is_none()) {
+        if let Some(_) = self
+            .queue_families
+            .iter()
+            .find(|family| family.index.is_none())
+        {
             Err(PhysicalDeviceError::IncompleteQueueFamilies)
         } else {
             Ok(())
@@ -223,7 +228,7 @@ impl PhysicalDevice {
         self.handle
     }
 
-    pub fn extensions(&self) -> &[DeviceExtension] {
+    pub fn enabled_extensions(&self) -> &[DeviceExtension] {
         &self.extensions
     }
 

@@ -28,11 +28,15 @@ fn main() -> Result<()> {
         .build(&instance)?;
     let logical_device = LogicalDevice::new(instance, physical_device)?;
 
-    let _surface = Surface::new(
+    let surface = Surface::new(
         logical_device.instance(),
         logical_device.physical_device(),
         &window,
     )?;
+    let _swapchain = Swapchain::builder()
+        .preferred_color_format(ColorFormat::Srgb)
+        .preferred_present_mode(PresentMode::Mailbox)
+        .build(&logical_device, &surface);
 
     event_loop.run_return(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {

@@ -128,4 +128,5 @@ pub mod prelude {
     };
     pub use crate::core::instance::{Instance, InstanceError};
     pub use crate::core::surface::{Surface, SurfaceError};
+    pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 }

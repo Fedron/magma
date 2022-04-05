@@ -24,7 +24,7 @@ impl Display for DeviceExtension {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Queue {
     Graphics,
     Compute,
@@ -33,6 +33,20 @@ pub enum Queue {
     Protected,
     VideoDecode,
     VideoEncode,
+}
+
+impl Display for Queue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Queue::Graphics => write!(f, "Graphics"),
+            Queue::Compute => write!(f, "Compute"),
+            Queue::Transfer => write!(f, "Transfer"),
+            Queue::Sparse => write!(f, "Sparse"),
+            Queue::Protected => write!(f, "Protected"),
+            Queue::VideoDecode => write!(f, "Video Decode"),
+            Queue::VideoEncode => write!(f, "Video Encode"),
+        }
+    }
 }
 
 impl Into<vk::QueueFlags> for Queue {
@@ -51,8 +65,8 @@ impl Into<vk::QueueFlags> for Queue {
 
 #[derive(Clone, Copy, Debug)]
 pub struct QueueFamily {
-    ty: Queue,
-    index: Option<u32>,
+    pub ty: Queue,
+    pub index: Option<u32>,
 }
 
 impl QueueFamily {

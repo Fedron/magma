@@ -1,13 +1,17 @@
 use ash::vk;
 
 use crate::{
-    core::device::PhysicalDevice, core::instance::Instance, prelude::DeviceExtension, VulkanError,
+    core::device::{DeviceExtension, PhysicalDevice, Queue},
+    core::instance::Instance,
+    VulkanError,
 };
 
 #[derive(thiserror::Error, Debug)]
 pub enum SurfaceError {
     #[error("Can't create a surface on the device provided as it doesn't have the DeviceExtension::Swapchain")]
-    PhysicalDeviceNotCapable,
+    DeviceNotCapable,
+    #[error("Can't create a surface on a device that wasn't created with a '{0}' queue family")]
+    MissingQueueFamily(Queue),
     #[error("Failed to create a surface for Windows")]
     CantCreateWin32Surface(VulkanError),
     #[error("Failed to query the surface for properties")]
@@ -19,6 +23,7 @@ pub enum SurfaceQueryType {
     Capabilities,
     Format,
     PresentModes,
+    SurfaceSupport,
 }
 
 pub struct Surface {
@@ -36,18 +41,41 @@ impl Surface {
         physical_device: &PhysicalDevice,
         window: &winit::window::Window,
     ) -> Result<Surface, SurfaceError> {
-        if physical_device
-            .extensions()
-            .iter()
-            .find(|&&extension| extension == DeviceExtension::Swapchain)
-            .is_none()
+        if !physical_device
+            .enabled_extensions()
+            .contains(&DeviceExtension::Swapchain)
         {
-            return Err(SurfaceError::PhysicalDeviceNotCapable);
+            return Err(SurfaceError::DeviceNotCapable);
+        }
+
+        let graphics_family = physical_device
+            .queue_families()
+            .iter()
+            .find(|family| family.ty == Queue::Graphics);
+        if graphics_family.is_none() {
+            return Err(SurfaceError::MissingQueueFamily(Queue::Graphics));
         }
 
         let surface = ash::extensions::khr::Surface::new(instance.entry(), instance.vk_handle());
         let handle =
             unsafe { Surface::create_surface(instance.entry(), instance.vk_handle(), window)? };
+
+        let supported = if let Some(family) = graphics_family {
+            unsafe {
+                surface
+                    .get_physical_device_surface_support(
+                        physical_device.vk_handle(),
+                        family.index.unwrap(),
+                        handle,
+                    )
+                    .map_err(|_| SurfaceError::FailedQuery(SurfaceQueryType::SurfaceSupport))?
+            }
+        } else {
+            false
+        };
+        if !supported {
+            return Err(SurfaceError::DeviceNotCapable);
+        }
 
         let capabilities = unsafe {
             surface
@@ -101,6 +129,10 @@ impl Surface {
 }
 
 impl Surface {
+    pub(crate) fn vk_handle(&self) -> vk::SurfaceKHR {
+        self.handle
+    }
+
     pub fn capabilities(&self) -> &vk::SurfaceCapabilitiesKHR {
         &self.capabilities
     }
