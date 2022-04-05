@@ -1,7 +1,12 @@
 use ash::vk;
 
+mod logical;
 mod physical;
-pub use physical::{PhysicalDevice, PhysicalDeviceBuilder, PhysicalDeviceType};
+
+pub use logical::{LogicalDevice, LogicalDeviceError};
+pub use physical::{
+    PhysicalDevice, PhysicalDeviceBuilder, PhysicalDeviceError, PhysicalDeviceType,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Queue {

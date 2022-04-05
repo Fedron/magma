@@ -1,6 +1,9 @@
 use ash::vk;
 
-use crate::{core::{device::QueueFamily, instance::Instance}, utils};
+use crate::{
+    core::{device::QueueFamily, instance::Instance},
+    utils,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum PhysicalDeviceError {
@@ -155,5 +158,27 @@ pub struct PhysicalDevice {
 impl PhysicalDevice {
     pub fn builder() -> PhysicalDeviceBuilder {
         PhysicalDeviceBuilder::new()
+    }
+}
+
+impl PhysicalDevice {
+    pub fn vk_handle(&self) -> vk::PhysicalDevice {
+        self.handle
+    }
+
+    pub fn queue_families(&self) -> &[QueueFamily] {
+        &self.queue_families
+    }
+
+    pub fn properties(&self) -> &vk::PhysicalDeviceProperties {
+        &self.properties
+    }
+
+    pub fn features(&self) -> &vk::PhysicalDeviceFeatures {
+        &self.features
+    }
+
+    pub fn memory_properties(&self) -> &vk::PhysicalDeviceMemoryProperties {
+        &self.memory_properties
     }
 }

@@ -20,10 +20,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Failed to create window");
 
     let instance = Instance::new()?;
-    let _physical_device = PhysicalDevice::builder()
+    let physical_device = PhysicalDevice::builder()
         .preferred_type(PhysicalDeviceType::CPU)
         .add_queue_family(QueueFamily::new(Queue::Graphics))
         .build(&instance)?;
+    let _logical_device = LogicalDevice::new(instance, physical_device, &[])?;
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
