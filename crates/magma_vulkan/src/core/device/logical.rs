@@ -109,6 +109,23 @@ impl LogicalDevice {
     }
 }
 
+impl LogicalDevice {
+    pub(crate) fn vk_handle(&self) -> &ash::Device {
+        &self.handle
+    }
+    pub fn queues(&self) -> &[vk::Queue] {
+        &self.queues
+    }
+
+    pub fn physical_device(&self) -> &PhysicalDevice {
+        &self.physical_device
+    }
+
+    pub fn instance(&self) -> &Instance {
+        &self.instance
+    }
+}
+
 impl Drop for LogicalDevice {
     fn drop(&mut self) {
         unsafe {

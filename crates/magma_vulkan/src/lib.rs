@@ -127,4 +127,5 @@ pub mod prelude {
         PhysicalDeviceError, PhysicalDeviceType, Queue, QueueFamily,
     };
     pub use crate::core::instance::{Instance, InstanceError};
+    pub use crate::core::surface::{Surface, SurfaceError};
 }

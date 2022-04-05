@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     let event_loop = EventLoop::new();
-    let _window = WindowBuilder::new()
+    let window = WindowBuilder::new()
         .with_title("Example App Base")
         .build(&event_loop)
         .expect("Failed to create window");
@@ -24,7 +24,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .preferred_type(PhysicalDeviceType::CPU)
         .add_queue_family(QueueFamily::new(Queue::Graphics))
         .build(&instance)?;
-    let _logical_device = LogicalDevice::new(instance, physical_device, &[])?;
+    let logical_device = LogicalDevice::new(instance, physical_device, &[])?;
+
+    let _surface = Surface::new(logical_device.instance(), &window)?;
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {

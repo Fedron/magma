@@ -26,7 +26,7 @@ pub enum InstanceError {
 }
 
 pub struct Instance {
-    debugger: Option<Debugger>,
+    _debugger: Option<Debugger>,
     handle: ash::Instance,
     entry: ash::Entry,
 }
@@ -77,7 +77,7 @@ impl Instance {
         };
 
         Ok(Instance {
-            debugger,
+            _debugger: debugger,
             entry,
             handle,
         })
