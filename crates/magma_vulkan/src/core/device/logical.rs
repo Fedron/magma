@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::ffi::CString;
 
 use ash::vk;
 
@@ -17,21 +17,6 @@ pub enum LogicalDeviceError {
     CantCreate(VulkanError),
 }
 
-/// https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#extension-appendices-list
-pub enum DeviceExtension {
-    Surface,
-    Swapchain,
-}
-
-impl Display for DeviceExtension {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeviceExtension::Surface => write!(f, "VK_KHR_surface\0"),
-            DeviceExtension::Swapchain => write!(f, "VK_KHR_swapchain\0"),
-        }
-    }
-}
-
 pub struct LogicalDevice {
     queues: Vec<vk::Queue>,
 
@@ -44,7 +29,6 @@ impl LogicalDevice {
     pub fn new(
         instance: Instance,
         physical_device: PhysicalDevice,
-        device_extensions: &[DeviceExtension],
     ) -> Result<LogicalDevice, LogicalDeviceError> {
         use std::collections::HashSet;
         use std::ffi::CStr;
@@ -74,25 +58,31 @@ impl LogicalDevice {
             Vec::new()
         };
 
-        let device_extensions: Vec<*const i8> = device_extensions
+        let device_extensions: Vec<CString> = physical_device
+            .extensions()
             .iter()
-            .map(|extension| {
-                unsafe { CStr::from_bytes_with_nul_unchecked(extension.to_string().as_bytes()) }
-                    .as_ptr()
-            })
+            .map(|extension| CString::new(extension.to_string()).expect("Failed to create CString"))
+            .collect();
+
+        let device_extensions_ptr: Vec<*const i8> = device_extensions
+            .iter()
+            .map(|extension| extension.as_ptr())
             .collect();
 
         let create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_infos)
             .enabled_features(physical_device.features())
             .enabled_layer_names(&required_validation_layers)
-            .enabled_extension_names(&device_extensions);
+            .enabled_extension_names(&device_extensions_ptr);
 
         let handle = unsafe {
             instance
                 .vk_handle()
                 .create_device(physical_device.vk_handle(), &create_info, None)
-                .map_err(|err| LogicalDeviceError::CantCreate(err.into()))?
+                .map_err(|err| {
+                    println!("{:#?}", err);
+                    LogicalDeviceError::CantCreate(err.into())
+                })?
         };
 
         let mut queues: Vec<vk::Queue> = Vec::new();
@@ -102,6 +92,7 @@ impl LogicalDevice {
 
         Ok(LogicalDevice {
             queues,
+
             physical_device,
             handle,
             instance,
@@ -113,6 +104,7 @@ impl LogicalDevice {
     pub(crate) fn vk_handle(&self) -> &ash::Device {
         &self.handle
     }
+
     pub fn queues(&self) -> &[vk::Queue] {
         &self.queues
     }

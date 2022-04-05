@@ -123,7 +123,7 @@ impl From<VkResult> for VulkanError {
 
 pub mod prelude {
     pub use crate::core::device::{
-        LogicalDevice, LogicalDeviceError, PhysicalDevice, PhysicalDeviceBuilder,
+        DeviceExtension, LogicalDevice, LogicalDeviceError, PhysicalDevice, PhysicalDeviceBuilder,
         PhysicalDeviceError, PhysicalDeviceType, Queue, QueueFamily,
     };
     pub use crate::core::instance::{Instance, InstanceError};

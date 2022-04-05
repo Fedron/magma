@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use ash::vk;
 
 mod logical;
@@ -7,6 +9,20 @@ pub use logical::{LogicalDevice, LogicalDeviceError};
 pub use physical::{
     PhysicalDevice, PhysicalDeviceBuilder, PhysicalDeviceError, PhysicalDeviceType,
 };
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+/// https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#extension-appendices-list
+pub enum DeviceExtension {
+    Swapchain,
+}
+
+impl Display for DeviceExtension {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeviceExtension::Swapchain => write!(f, "VK_KHR_swapchain"),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum Queue {

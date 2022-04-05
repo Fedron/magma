@@ -2,8 +2,10 @@ use ash::vk;
 
 use crate::{
     core::{device::QueueFamily, instance::Instance},
-    utils,
+    utils, VulkanError,
 };
+
+use super::DeviceExtension;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PhysicalDeviceError {
@@ -13,6 +15,10 @@ pub enum PhysicalDeviceError {
     NoSuitableDevice,
     #[error("Not all queue families have an index")]
     IncompleteQueueFamilies,
+    #[error("The physical device doesn't support some (or all) of the required extensions")]
+    UnsupportedExtensions(Vec<String>),
+    #[error(transparent)]
+    Other(#[from] VulkanError),
 }
 
 pub enum PhysicalDeviceType {
@@ -26,6 +32,7 @@ pub enum PhysicalDeviceType {
 pub struct PhysicalDeviceBuilder {
     queue_families: Vec<QueueFamily>,
     preferred_type: PhysicalDeviceType,
+    device_extensions: Vec<DeviceExtension>,
 }
 
 impl PhysicalDeviceBuilder {
@@ -33,6 +40,7 @@ impl PhysicalDeviceBuilder {
         PhysicalDeviceBuilder {
             queue_families: Vec::new(),
             preferred_type: PhysicalDeviceType::DiscreteGPU,
+            device_extensions: Vec::new(),
         }
     }
 
@@ -43,6 +51,11 @@ impl PhysicalDeviceBuilder {
 
     pub fn preferred_type(mut self, ty: PhysicalDeviceType) -> PhysicalDeviceBuilder {
         self.preferred_type = ty;
+        self
+    }
+
+    pub fn device_extensions(mut self, extensions: &[DeviceExtension]) -> PhysicalDeviceBuilder {
+        self.device_extensions = extensions.to_vec();
         self
     }
 
@@ -70,10 +83,13 @@ impl PhysicalDeviceBuilder {
         );
 
         Ok(PhysicalDevice {
+            extensions: self.device_extensions,
             queue_families: self.queue_families,
+
             properties,
             features,
             memory_properties,
+
             handle,
         })
     }
@@ -111,6 +127,8 @@ impl PhysicalDeviceBuilder {
         device: vk::PhysicalDevice,
     ) -> Result<bool, PhysicalDeviceError> {
         PhysicalDeviceBuilder::find_queue_families(instance, device, &mut self.queue_families)?;
+        self.check_device_extension_support(instance, device)?;
+
         Ok(true)
     }
 
@@ -144,10 +162,49 @@ impl PhysicalDeviceBuilder {
             Ok(())
         }
     }
+
+    fn check_device_extension_support(
+        &self,
+        instance: &Instance,
+        device: vk::PhysicalDevice,
+    ) -> Result<(), PhysicalDeviceError> {
+        let available_extension_names = unsafe {
+            instance
+                .vk_handle()
+                .enumerate_device_extension_properties(device)
+                .map_err(|err| PhysicalDeviceError::Other(err.into()))?
+        };
+
+        let is_missing_extensions = utils::contains_required(
+            &available_extension_names
+                .iter()
+                .map(|extension| utils::char_array_to_string(&extension.extension_name))
+                .collect::<Vec<String>>(),
+            &self
+                .device_extensions
+                .iter()
+                .map(|&extension| extension.to_string())
+                .collect::<Vec<String>>(),
+        );
+
+        if is_missing_extensions.0 {
+            log::error!(
+                "Your device is missing required extensions: {:?}",
+                is_missing_extensions.1
+            );
+            Err(PhysicalDeviceError::UnsupportedExtensions(
+                is_missing_extensions.1,
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 pub struct PhysicalDevice {
+    extensions: Vec<DeviceExtension>,
     queue_families: Vec<QueueFamily>,
+
     properties: vk::PhysicalDeviceProperties,
     features: vk::PhysicalDeviceFeatures,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
@@ -164,6 +221,10 @@ impl PhysicalDevice {
 impl PhysicalDevice {
     pub fn vk_handle(&self) -> vk::PhysicalDevice {
         self.handle
+    }
+
+    pub fn extensions(&self) -> &[DeviceExtension] {
+        &self.extensions
     }
 
     pub fn queue_families(&self) -> &[QueueFamily] {

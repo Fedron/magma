@@ -1,3 +1,5 @@
+use std::mem::ManuallyDrop;
+
 #[cfg(target_os = "windows")]
 use ash::extensions::khr::Win32Surface;
 
@@ -26,7 +28,7 @@ pub enum InstanceError {
 }
 
 pub struct Instance {
-    _debugger: Option<Debugger>,
+    debugger: ManuallyDrop<Option<Debugger>>,
     handle: ash::Instance,
     entry: ash::Entry,
 }
@@ -77,7 +79,7 @@ impl Instance {
         };
 
         Ok(Instance {
-            _debugger: debugger,
+            debugger: ManuallyDrop::new(debugger),
             entry,
             handle,
         })
@@ -133,6 +135,7 @@ impl Instance {
 impl Drop for Instance {
     fn drop(&mut self) {
         unsafe {
+            ManuallyDrop::drop(&mut self.debugger);
             self.handle.destroy_instance(None);
         }
     }
