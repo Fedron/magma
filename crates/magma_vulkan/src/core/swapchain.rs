@@ -4,7 +4,7 @@ use ash::vk;
 
 use crate::{
     core::{
-        device::{DeviceExtension, LogicalDevice, Queue},
+        device::{DeviceExtension, LogicalDevice, LogicalDeviceError, Queue},
         surface::Surface,
     },
     VulkanError,
@@ -22,6 +22,10 @@ pub enum SwapchainError {
         "Can't create a swapchain because the device wasn't created with a '{0}' queue family"
     )]
     MissingQueueFamily(Queue),
+    #[error("Failed to create a Vulkan render pass: {0}")]
+    CantCreateRenderPass(VulkanError),
+    #[error(transparent)]
+    DeviceError(#[from] LogicalDeviceError),
 }
 
 #[derive(Clone, Copy)]
@@ -157,11 +161,29 @@ impl SwapchainBuilder {
             &images,
         );
 
+        let depth_format = device.find_supported_format(
+            &[
+                vk::Format::D32_SFLOAT,
+                vk::Format::D32_SFLOAT_S8_UINT,
+                vk::Format::D24_UNORM_S8_UINT,
+            ],
+            vk::ImageTiling::OPTIMAL,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        )?;
+        let render_pass = SwapchainBuilder::create_render_pass(
+            device.vk_handle(),
+            surface_format.format,
+            depth_format,
+        )?;
+
         Ok(Swapchain {
             images,
             image_views,
             format: surface_format.format,
+            depth_format,
             extent,
+
+            render_pass,
 
             swapchain,
             handle,
@@ -250,13 +272,84 @@ impl SwapchainBuilder {
 
         image_views
     }
+
+    fn create_render_pass(
+        device: &ash::Device,
+        surface_format: vk::Format,
+        depth_format: vk::Format,
+    ) -> Result<vk::RenderPass, SwapchainError> {
+        let color_attachment = vk::AttachmentDescription::builder()
+            .format(surface_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .build();
+
+        let color_attachment_ref = [vk::AttachmentReference {
+            attachment: 0,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        }];
+
+        let depth_attachment = vk::AttachmentDescription::builder()
+            .format(depth_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+            .build();
+
+        let depth_attachment_ref = vk::AttachmentReference {
+            attachment: 1,
+            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+
+        let subpasses = [vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .depth_stencil_attachment(&depth_attachment_ref)
+            .build()];
+
+        let subpass_dependencies = [vk::SubpassDependency {
+            src_subpass: vk::SUBPASS_EXTERNAL,
+            dst_subpass: 0,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            src_access_mask: vk::AccessFlags::empty(),
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            dependency_flags: vk::DependencyFlags::empty(),
+        }];
+
+        let render_pass_attachments = [color_attachment, depth_attachment];
+        let create_info = vk::RenderPassCreateInfo::builder()
+            .attachments(&render_pass_attachments)
+            .subpasses(&subpasses)
+            .dependencies(&subpass_dependencies);
+
+        unsafe {
+            device
+                .create_render_pass(&create_info, None)
+                .map_err(|err| SwapchainError::CantCreateRenderPass(err.into()))
+        }
+    }
 }
 
 pub struct Swapchain {
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
     format: vk::Format,
+    depth_format: vk::Format,
     extent: vk::Extent2D,
+
+    render_pass: vk::RenderPass,
 
     swapchain: ash::extensions::khr::Swapchain,
     handle: vk::SwapchainKHR,
@@ -269,6 +362,12 @@ impl Swapchain {
     }
 }
 
+impl Swapchain {
+    pub fn render_pass(&self) -> vk::RenderPass {
+        self.render_pass
+    }
+}
+
 impl Drop for Swapchain {
     fn drop(&mut self) {
         for &image_view in self.image_views.iter() {
@@ -278,6 +377,9 @@ impl Drop for Swapchain {
         }
 
         unsafe {
+            self.device
+                .vk_handle()
+                .destroy_render_pass(self.render_pass, None);
             self.swapchain.destroy_swapchain(self.handle, None);
         };
     }

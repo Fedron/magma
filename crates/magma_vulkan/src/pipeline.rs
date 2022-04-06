@@ -49,10 +49,13 @@ impl PipelineBuilder {
         self
     }
 
-    // TODO: Set render pass function
+    pub fn render_pass(mut self, render_pass: vk::RenderPass) -> PipelineBuilder {
+        self.render_pass = Some(render_pass);
+        self
+    }
 
     pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline, PipelineError> {
-        use std::ffi::CString;
+        use std::ffi::CStr;
 
         if self
             .shaders
@@ -72,12 +75,10 @@ impl PipelineBuilder {
 
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = Vec::new();
         for shader in self.shaders.iter() {
-            let cstring =
-                unsafe { CString::from_vec_unchecked(shader.entry_point().clone().into_bytes()) };
             shader_stages.push(
                 vk::PipelineShaderStageCreateInfo::builder()
                     .module(shader.module())
-                    .name(&cstring)
+                    .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") })
                     .stage(Into::<vk::ShaderStageFlags>::into(*shader.stage()))
                     .build(),
             );

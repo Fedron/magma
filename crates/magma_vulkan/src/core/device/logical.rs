@@ -15,6 +15,8 @@ use crate::{
 pub enum LogicalDeviceError {
     #[error("Failed to create a logical device")]
     CantCreate(VulkanError),
+    #[error("Failed to find a format from the candidates that is supported by the device")]
+    NoSupportedFormat,
 }
 
 pub struct LogicalDevice {
@@ -114,6 +116,35 @@ impl LogicalDevice {
 
     pub fn instance(&self) -> &Instance {
         &self.instance
+    }
+}
+
+impl LogicalDevice {
+    pub fn find_supported_format(
+        &self,
+        candidates: &[vk::Format],
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> Result<vk::Format, LogicalDeviceError> {
+        for &format in candidates {
+            let properties = unsafe {
+                self.instance
+                    .vk_handle()
+                    .get_physical_device_format_properties(self.physical_device.vk_handle(), format)
+            };
+
+            if tiling == vk::ImageTiling::LINEAR
+                && properties.linear_tiling_features.contains(features)
+            {
+                return Ok(format);
+            } else if tiling == vk::ImageTiling::OPTIMAL
+                && properties.optimal_tiling_features.contains(features)
+            {
+                return Ok(format);
+            }
+        }
+
+        Err(LogicalDeviceError::NoSupportedFormat)
     }
 }
 

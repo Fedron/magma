@@ -35,15 +35,16 @@ fn main() -> Result<()> {
         logical_device.physical_device(),
         &window,
     )?;
-    let _swapchain = Swapchain::builder()
+    let swapchain = Swapchain::builder()
         .preferred_color_format(ColorFormat::Srgb)
         .preferred_present_mode(PresentMode::Mailbox)
-        .build(logical_device.clone(), &surface);
+        .build(logical_device.clone(), &surface)?;
 
     let shader = ShaderBuilder::new("shaders/simple.vert").build(logical_device.clone())?;
 
     let _pipeline = Pipeline::builder()
         .add_shader(shader)
+        .render_pass(swapchain.render_pass())
         .build(logical_device.clone())?;
 
     event_loop.run_return(move |event, _, control_flow| match event {
