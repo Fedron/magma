@@ -17,6 +17,12 @@ pub enum LogicalDeviceError {
     CantCreate(VulkanError),
     #[error("Failed to find a format from the candidates that is supported by the device")]
     NoSupportedFormat,
+    #[error(
+        "Failed to find a memory type that the device supports that matches caller's requirements"
+    )]
+    NoSupportedMemoryType,
+    #[error(transparent)]
+    Other(#[from] VulkanError),
 }
 
 pub struct LogicalDevice {
@@ -120,6 +126,61 @@ impl LogicalDevice {
 }
 
 impl LogicalDevice {
+    pub fn create_image(
+        &self,
+        create_info: &vk::ImageCreateInfo,
+        memory_properties: vk::MemoryPropertyFlags,
+    ) -> Result<(vk::Image, vk::DeviceMemory), LogicalDeviceError> {
+        let image = unsafe {
+            self.handle
+                .create_image(create_info, None)
+                .map_err(|err| LogicalDeviceError::Other(err.into()))?
+        };
+
+        let memory_requirements = unsafe { self.handle.get_image_memory_requirements(image) };
+        let allocate_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(memory_requirements.size)
+            .memory_type_index(
+                self.find_memory_type(memory_requirements.memory_type_bits, memory_properties)?,
+            );
+
+        let device_memory = unsafe {
+            self.handle
+                .allocate_memory(&allocate_info, None)
+                .map_err(|err| LogicalDeviceError::Other(err.into()))?
+        };
+
+        unsafe {
+            self.handle
+                .bind_image_memory(image, device_memory, 0)
+                .map_err(|err| LogicalDeviceError::Other(err.into()))?
+        };
+
+        Ok((image, device_memory))
+    }
+
+    pub fn find_memory_type(
+        &self,
+        type_filter: u32,
+        required_properties: vk::MemoryPropertyFlags,
+    ) -> Result<u32, LogicalDeviceError> {
+        for (i, memory_type) in self
+            .physical_device
+            .memory_properties()
+            .memory_types
+            .iter()
+            .enumerate()
+        {
+            if (type_filter & (1 << i)) > 0
+                && memory_type.property_flags.contains(required_properties)
+            {
+                return Ok(i as u32);
+            }
+        }
+
+        Err(LogicalDeviceError::NoSupportedMemoryType)
+    }
+
     pub fn find_supported_format(
         &self,
         candidates: &[vk::Format],

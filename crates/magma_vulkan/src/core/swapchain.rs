@@ -24,6 +24,10 @@ pub enum SwapchainError {
     MissingQueueFamily(Queue),
     #[error("Failed to create a Vulkan render pass: {0}")]
     CantCreateRenderPass(VulkanError),
+    #[error("Failed to create a Vulkan framebuffer: {0}")]
+    CantCreateFramebuffer(VulkanError),
+    #[error("Failed to create a Vulkan image view: {0}")]
+    CantCreateImageView(VulkanError),
     #[error(transparent)]
     DeviceError(#[from] LogicalDeviceError),
 }
@@ -176,14 +180,34 @@ impl SwapchainBuilder {
             depth_format,
         )?;
 
+        let (depth_images, depth_image_memories, depth_image_views) =
+            SwapchainBuilder::create_depth_resources(
+                device.as_ref(),
+                &depth_format,
+                image_views.len(),
+                &extent,
+            )?;
+        let framebuffers = SwapchainBuilder::create_framebuffers(
+            device.vk_handle(),
+            render_pass,
+            &image_views,
+            &depth_image_views,
+            &extent,
+        )?;
+
         Ok(Swapchain {
             images,
             image_views,
+            depth_images,
+            depth_image_views,
+            depth_image_memories,
+
             format: surface_format.format,
             depth_format,
             extent,
 
             render_pass,
+            framebuffers,
 
             swapchain,
             handle,
@@ -340,16 +364,103 @@ impl SwapchainBuilder {
                 .map_err(|err| SwapchainError::CantCreateRenderPass(err.into()))
         }
     }
+
+    fn create_depth_resources(
+        device: &LogicalDevice,
+        depth_format: &vk::Format,
+        count: usize,
+        extent: &vk::Extent2D,
+    ) -> Result<(Vec<vk::Image>, Vec<vk::DeviceMemory>, Vec<vk::ImageView>), SwapchainError> {
+        let mut depth_images: Vec<vk::Image> = Vec::new();
+        let mut depth_image_memories: Vec<vk::DeviceMemory> = Vec::new();
+        let mut depth_image_views: Vec<vk::ImageView> = Vec::new();
+
+        for _ in 0..count {
+            let image_info = vk::ImageCreateInfo::builder()
+                .image_type(vk::ImageType::TYPE_2D)
+                .extent(vk::Extent3D {
+                    width: extent.width,
+                    height: extent.height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .array_layers(1)
+                .format(*depth_format)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+            let (depth_image, depth_image_memory) =
+                device.create_image(&image_info, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
+
+            let image_view_info = vk::ImageViewCreateInfo::builder()
+                .image(depth_image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(*depth_format)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            depth_image_views.push(unsafe {
+                device
+                    .vk_handle()
+                    .create_image_view(&image_view_info, None)
+                    .map_err(|err| SwapchainError::CantCreateImageView(err.into()))?
+            });
+            depth_images.push(depth_image);
+            depth_image_memories.push(depth_image_memory);
+        }
+
+        Ok((depth_images, depth_image_memories, depth_image_views))
+    }
+
+    fn create_framebuffers(
+        device: &ash::Device,
+        render_pass: vk::RenderPass,
+        image_views: &[vk::ImageView],
+        depth_image_views: &[vk::ImageView],
+        swapchain_extent: &vk::Extent2D,
+    ) -> Result<Vec<vk::Framebuffer>, SwapchainError> {
+        let mut framebuffers: Vec<vk::Framebuffer> = Vec::new();
+        for (&image_view, &depth_image_view) in image_views.iter().zip(depth_image_views) {
+            let attachments = [image_view, depth_image_view];
+
+            let framebuffer_info = vk::FramebufferCreateInfo::builder()
+                .render_pass(render_pass)
+                .attachments(&attachments)
+                .width(swapchain_extent.width)
+                .height(swapchain_extent.height)
+                .layers(1);
+
+            framebuffers.push(unsafe {
+                device
+                    .create_framebuffer(&framebuffer_info, None)
+                    .map_err(|err| SwapchainError::CantCreateFramebuffer(err.into()))?
+            });
+        }
+
+        Ok(framebuffers)
+    }
 }
 
 pub struct Swapchain {
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
+    depth_images: Vec<vk::Image>,
+    depth_image_views: Vec<vk::ImageView>,
+    depth_image_memories: Vec<vk::DeviceMemory>,
+
     format: vk::Format,
     depth_format: vk::Format,
     extent: vk::Extent2D,
 
     render_pass: vk::RenderPass,
+    framebuffers: Vec<vk::Framebuffer>,
 
     swapchain: ash::extensions::khr::Swapchain,
     handle: vk::SwapchainKHR,
@@ -374,6 +485,28 @@ impl Drop for Swapchain {
             unsafe {
                 self.device.vk_handle().destroy_image_view(image_view, None);
             };
+        }
+
+        for i in 0..self.depth_images.len() {
+            unsafe {
+                self.device
+                    .vk_handle()
+                    .destroy_image_view(*self.depth_image_views.get(i).unwrap(), None);
+                self.device
+                    .vk_handle()
+                    .destroy_image(*self.depth_images.get(i).unwrap(), None);
+                self.device
+                    .vk_handle()
+                    .free_memory(*self.depth_image_memories.get(i).unwrap(), None);
+            }
+        }
+
+        for &framebuffer in self.framebuffers.iter() {
+            unsafe {
+                self.device
+                    .vk_handle()
+                    .destroy_framebuffer(framebuffer, None);
+            }
         }
 
         unsafe {
