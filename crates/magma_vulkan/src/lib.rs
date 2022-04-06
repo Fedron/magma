@@ -1,7 +1,7 @@
 extern crate log;
 
 mod core;
-mod shaders;
+mod pipeline;
 mod utils;
 
 use ash::vk::Result as VkResult;
@@ -131,6 +131,5 @@ pub mod prelude {
     pub use crate::core::surface::{Surface, SurfaceError};
     pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 
-    pub use crate::shaders::builder::{ShaderBuilder, ShaderBuilderError};
-    pub use crate::shaders::ShaderStage;
+    pub use crate::pipeline::shader::{ShaderBuilder, ShaderBuilderError, ShaderStage};
 }
