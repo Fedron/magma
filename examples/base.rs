@@ -41,7 +41,10 @@ fn main() -> Result<()> {
         .build(logical_device.clone(), &surface);
 
     let shader = ShaderBuilder::new("shaders/simple.vert").build(logical_device.clone())?;
-    println!("{:#?}", shader);
+
+    let _pipeline = Pipeline::builder()
+        .add_shader(shader)
+        .build(logical_device.clone())?;
 
     event_loop.run_return(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
