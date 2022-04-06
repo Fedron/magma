@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ash::vk;
 
 use crate::{
@@ -81,7 +83,7 @@ impl SwapchainBuilder {
 
     pub fn build(
         self,
-        device: &LogicalDevice,
+        device: Rc<LogicalDevice>,
         surface: &Surface,
     ) -> Result<Swapchain, SwapchainError> {
         if !device
@@ -163,6 +165,7 @@ impl SwapchainBuilder {
 
             swapchain,
             handle,
+            device,
         })
     }
 }
@@ -257,6 +260,7 @@ pub struct Swapchain {
 
     swapchain: ash::extensions::khr::Swapchain,
     handle: vk::SwapchainKHR,
+    device: Rc<LogicalDevice>,
 }
 
 impl Swapchain {
@@ -267,6 +271,12 @@ impl Swapchain {
 
 impl Drop for Swapchain {
     fn drop(&mut self) {
+        for &image_view in self.image_views.iter() {
+            unsafe {
+                self.device.vk_handle().destroy_image_view(image_view, None);
+            };
+        }
+
         unsafe {
             self.swapchain.destroy_swapchain(self.handle, None);
         };

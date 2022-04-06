@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use anyhow::Result;
 use winit::{
     event::{Event, WindowEvent},
@@ -26,7 +28,7 @@ fn main() -> Result<()> {
         .add_queue_family(QueueFamily::new(Queue::Graphics))
         .device_extensions(&[DeviceExtension::Swapchain])
         .build(&instance)?;
-    let logical_device = LogicalDevice::new(instance, physical_device)?;
+    let logical_device = Rc::new(LogicalDevice::new(instance, physical_device)?);
 
     let surface = Surface::new(
         logical_device.instance(),
@@ -36,7 +38,10 @@ fn main() -> Result<()> {
     let _swapchain = Swapchain::builder()
         .preferred_color_format(ColorFormat::Srgb)
         .preferred_present_mode(PresentMode::Mailbox)
-        .build(&logical_device, &surface);
+        .build(logical_device.clone(), &surface);
+
+    let shader = ShaderBuilder::new("shaders/simple.vert").build(logical_device.clone())?;
+    println!("{:#?}", shader);
 
     event_loop.run_return(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
