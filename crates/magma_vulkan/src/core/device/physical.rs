@@ -5,7 +5,7 @@ use crate::{
     utils, VulkanError,
 };
 
-use super::DeviceExtension;
+use super::{DeviceExtension, Queue};
 
 #[derive(thiserror::Error, Debug)]
 pub enum PhysicalDeviceError {
@@ -234,6 +234,10 @@ impl PhysicalDevice {
 
     pub fn queue_families(&self) -> &[QueueFamily] {
         &self.queue_families
+    }
+
+    pub fn queue_family(&self, ty: Queue) -> Option<&QueueFamily> {
+        self.queue_families.iter().find(|family| family.ty == ty)
     }
 
     pub fn properties(&self) -> &vk::PhysicalDeviceProperties {

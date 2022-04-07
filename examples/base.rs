@@ -47,6 +47,15 @@ fn main() -> Result<()> {
         .render_pass(swapchain.render_pass())
         .build(logical_device.clone())?;
 
+    let mut command_pool = CommandPool::new(
+        logical_device.clone(),
+        logical_device
+            .physical_device()
+            .queue_family(Queue::Graphics)
+            .unwrap(),
+    )?;
+    command_pool.allocate_buffers(2, CommandBufferLevel::Primary)?;
+
     event_loop.run_return(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
             WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,

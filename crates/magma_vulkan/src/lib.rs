@@ -123,6 +123,8 @@ impl From<VkResult> for VulkanError {
 }
 
 pub mod prelude {
+    pub use crate::core::commands::buffer::{CommandBuffer, CommandBufferLevel};
+    pub use crate::core::commands::pool::{CommandPool, CommandPoolError};
     pub use crate::core::device::{
         DeviceExtension, LogicalDevice, LogicalDeviceError, PhysicalDevice, PhysicalDeviceBuilder,
         PhysicalDeviceError, PhysicalDeviceType, Queue, QueueFamily,
