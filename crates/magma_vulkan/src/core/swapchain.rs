@@ -474,8 +474,16 @@ impl Swapchain {
 }
 
 impl Swapchain {
+    pub fn extent(&self) -> (u32, u32) {
+        (self.extent.width, self.extent.height)
+    }
+
     pub fn render_pass(&self) -> vk::RenderPass {
         self.render_pass
+    }
+
+    pub fn framebuffers(&self) -> &[vk::Framebuffer] {
+        &self.framebuffers
     }
 }
 

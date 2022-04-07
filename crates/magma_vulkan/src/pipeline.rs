@@ -144,6 +144,12 @@ impl Pipeline {
     }
 }
 
+impl Pipeline {
+    pub fn vk_handle(&self) -> vk::Pipeline {
+        self.handle
+    }
+}
+
 impl Drop for Pipeline {
     fn drop(&mut self) {
         unsafe {

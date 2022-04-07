@@ -43,6 +43,12 @@ impl CommandPool {
 }
 
 impl CommandPool {
+    pub fn buffers_mut(&mut self) -> &mut [CommandBuffer] {
+        &mut self.buffers
+    }
+}
+
+impl CommandPool {
     pub fn allocate_buffers(
         &mut self,
         count: u32,
@@ -61,7 +67,7 @@ impl CommandPool {
         };
         let mut command_buffers = command_buffers
             .iter()
-            .map(|&handle| CommandBuffer::from(handle))
+            .map(|&handle| CommandBuffer::new(handle, self.device.clone()))
             .collect();
         self.buffers.append(&mut command_buffers);
 

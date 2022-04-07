@@ -42,7 +42,7 @@ fn main() -> Result<()> {
 
     let shader = ShaderBuilder::new("shaders/simple.vert").build(logical_device.clone())?;
 
-    let _pipeline = Pipeline::builder()
+    let pipeline = Pipeline::builder()
         .add_shader(shader)
         .render_pass(swapchain.render_pass())
         .build(logical_device.clone())?;
@@ -55,6 +55,21 @@ fn main() -> Result<()> {
             .unwrap(),
     )?;
     command_pool.allocate_buffers(2, CommandBufferLevel::Primary)?;
+
+    println!("{:#?}", swapchain.framebuffers().len());
+    for (index, buffer) in command_pool.buffers_mut().iter_mut().enumerate() {
+        buffer.begin()?;
+        buffer.set_clear_color((0.01, 0.01, 0.01));
+        buffer.begin_render_pass(
+            swapchain.render_pass(),
+            *swapchain.framebuffers().get(index).unwrap(),
+            swapchain.extent(),
+        )?;
+        buffer.bind_pipeline(&pipeline);
+        buffer.draw(3, 1, 0, 0);
+        buffer.end_render_pass();
+        buffer.end()?;
+    }
 
     event_loop.run_return(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
