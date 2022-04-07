@@ -82,6 +82,16 @@ fn main() -> Result<()> {
         buffer.end()?;
     }
 
+    let mut image_available_semaphores: Vec<Semaphore> = Vec::new();
+    let mut render_finished_semaphores: Vec<Semaphore> = Vec::new();
+    let mut in_flight_fences: Vec<Fence> = Vec::new();
+
+    for _ in 0..swapchain.framebuffers().len() {
+        image_available_semaphores.push(Semaphore::new(logical_device.clone())?);
+        render_finished_semaphores.push(Semaphore::new(logical_device.clone())?);
+        in_flight_fences.push(Fence::new(logical_device.clone())?);
+    }
+
     event_loop.run_return(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
             WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,

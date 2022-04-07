@@ -2,6 +2,7 @@ extern crate log;
 
 mod core;
 mod pipeline;
+mod sync;
 mod utils;
 
 use ash::vk::Result as VkResult;
@@ -135,4 +136,6 @@ pub mod prelude {
 
     pub use crate::pipeline::shader::{ShaderBuilder, ShaderError, ShaderStage};
     pub use crate::pipeline::{Pipeline, PipelineBuilder, PipelineError};
+
+    pub use crate::sync::{Fence, Semaphore};
 }
