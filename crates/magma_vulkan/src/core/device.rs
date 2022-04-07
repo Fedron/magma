@@ -63,6 +63,11 @@ impl Into<vk::QueueFlags> for Queue {
     }
 }
 
+pub struct QueueHandle {
+    pub(crate) handle: vk::Queue,
+    pub ty: Queue,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct QueueFamily {
     pub ty: Queue,

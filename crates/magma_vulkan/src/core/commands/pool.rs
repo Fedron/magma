@@ -43,6 +43,10 @@ impl CommandPool {
 }
 
 impl CommandPool {
+    pub fn buffers(&self) -> &[CommandBuffer] {
+        &self.buffers
+    }
+
     pub fn buffers_mut(&mut self) -> &mut [CommandBuffer] {
         &mut self.buffers
     }

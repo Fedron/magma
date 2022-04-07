@@ -35,7 +35,7 @@ fn main() -> Result<()> {
         logical_device.physical_device(),
         &window,
     )?;
-    let swapchain = Swapchain::builder()
+    let mut swapchain = Swapchain::builder()
         .preferred_color_format(ColorFormat::Srgb)
         .preferred_present_mode(PresentMode::Mailbox)
         .build(logical_device.clone(), &surface)?;
@@ -82,23 +82,27 @@ fn main() -> Result<()> {
         buffer.end()?;
     }
 
-    let mut image_available_semaphores: Vec<Semaphore> = Vec::new();
-    let mut render_finished_semaphores: Vec<Semaphore> = Vec::new();
-    let mut in_flight_fences: Vec<Fence> = Vec::new();
+    let mut should_close = false;
+    while !should_close {
+        event_loop.run_return(|event, _, control_flow| {
+            *control_flow = ControlFlow::Wait;
 
-    for _ in 0..swapchain.framebuffers().len() {
-        image_available_semaphores.push(Semaphore::new(logical_device.clone())?);
-        render_finished_semaphores.push(Semaphore::new(logical_device.clone())?);
-        in_flight_fences.push(Fence::new(logical_device.clone())?);
+            match event {
+                Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::CloseRequested => should_close = true,
+                    _ => {}
+                },
+                Event::MainEventsCleared => *control_flow = ControlFlow::Exit,
+                _ => {}
+            }
+        });
+
+        let image_index = swapchain.acquire_next_image()?;
+        swapchain.submit_command_buffer(
+            command_pool.buffers().get(image_index).unwrap(),
+            image_index,
+        )?;
     }
-
-    event_loop.run_return(move |event, _, control_flow| match event {
-        Event::WindowEvent { event, .. } => match event {
-            WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-            _ => {}
-        },
-        _ => {}
-    });
 
     Ok(())
 }

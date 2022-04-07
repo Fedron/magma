@@ -2,12 +2,14 @@ use std::ffi::CString;
 
 use ash::vk;
 
-use super::PhysicalDevice;
+use super::{PhysicalDevice, Queue};
 use crate::{
     core::{
         debugger::{ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
+        device::QueueHandle,
         instance::Instance,
     },
+    sync::Fence,
     VulkanError,
 };
 
@@ -26,7 +28,7 @@ pub enum LogicalDeviceError {
 }
 
 pub struct LogicalDevice {
-    queues: Vec<vk::Queue>,
+    queues: Vec<QueueHandle>,
 
     physical_device: PhysicalDevice,
     handle: ash::Device,
@@ -92,9 +94,12 @@ impl LogicalDevice {
                 })?
         };
 
-        let mut queues: Vec<vk::Queue> = Vec::new();
+        let mut queues: Vec<QueueHandle> = Vec::new();
         for queue_family in physical_device.queue_families().iter() {
-            queues.push(unsafe { handle.get_device_queue(queue_family.index.unwrap(), 0) });
+            queues.push(QueueHandle {
+                handle: unsafe { handle.get_device_queue(queue_family.index.unwrap(), 0) },
+                ty: queue_family.ty,
+            });
         }
 
         Ok(LogicalDevice {
@@ -112,8 +117,12 @@ impl LogicalDevice {
         &self.handle
     }
 
-    pub fn queues(&self) -> &[vk::Queue] {
+    pub fn queues(&self) -> &[QueueHandle] {
         &self.queues
+    }
+
+    pub fn queue(&self, ty: Queue) -> Option<&QueueHandle> {
+        self.queues.iter().find(|queue| queue.ty == ty)
     }
 
     pub fn physical_device(&self) -> &PhysicalDevice {
@@ -126,6 +135,37 @@ impl LogicalDevice {
 }
 
 impl LogicalDevice {
+    pub fn wait_for_fences(
+        &self,
+        fences: &[&Fence],
+        wait_all: bool,
+        timeout: u64,
+    ) -> Result<(), LogicalDeviceError> {
+        if fences.len() == 0 {
+            return Ok(());
+        }
+
+        let wait_fences: Vec<vk::Fence> = fences.iter().map(|&fence| fence.vk_handle()).collect();
+        unsafe {
+            self.handle
+                .wait_for_fences(&wait_fences, wait_all, timeout)
+                .map_err(|err| LogicalDeviceError::Other(err.into()))?
+        };
+
+        Ok(())
+    }
+
+    pub fn reset_fences(&self, fences: &[&Fence]) -> Result<(), LogicalDeviceError> {
+        let fences: Vec<vk::Fence> = fences.iter().map(|&fence| fence.vk_handle()).collect();
+        unsafe {
+            self.handle
+                .reset_fences(&fences)
+                .map_err(|err| LogicalDeviceError::Other(err.into()))?
+        };
+
+        Ok(())
+    }
+
     pub fn create_image(
         &self,
         create_info: &vk::ImageCreateInfo,

@@ -1,14 +1,17 @@
-use std::rc::Rc;
-
 use ash::vk;
+use std::rc::Rc;
 
 use crate::{
     core::{
+        commands::buffer::CommandBuffer,
         device::{DeviceExtension, LogicalDevice, LogicalDeviceError, Queue},
         surface::Surface,
     },
+    sync::{Fence, Semaphore},
     VulkanError,
 };
+
+const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SwapchainError {
@@ -28,6 +31,10 @@ pub enum SwapchainError {
     CantCreateFramebuffer(VulkanError),
     #[error("Failed to create a Vulkan image view: {0}")]
     CantCreateImageView(VulkanError),
+    #[error("The swapchain is suboptimal for the surface, can still draw but should be recreated")]
+    Suboptimal,
+    #[error("Can't perform an operation because the graphics queue is required but the device doesn't have one")]
+    DeviceMissingGraphicsQueue,
     #[error(transparent)]
     DeviceError(#[from] LogicalDeviceError),
 }
@@ -195,19 +202,40 @@ impl SwapchainBuilder {
             &extent,
         )?;
 
+        let mut image_available_semaphores: Vec<Semaphore> = Vec::new();
+        let mut render_finished_semaphores: Vec<Semaphore> = Vec::new();
+        let mut in_flight_fences: Vec<Fence> = Vec::new();
+        let mut images_in_flight: Vec<vk::Fence> = Vec::new();
+
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            image_available_semaphores.push(Semaphore::new(device.clone())?);
+            render_finished_semaphores.push(Semaphore::new(device.clone())?);
+            in_flight_fences.push(Fence::new(device.clone())?);
+        }
+
+        for _ in 0..images.len() {
+            images_in_flight.push(vk::Fence::null());
+        }
+
         Ok(Swapchain {
-            images,
+            _images: images,
             image_views,
             depth_images,
             depth_image_views,
             depth_image_memories,
 
-            format: surface_format.format,
-            depth_format,
+            _format: surface_format.format,
+            _depth_format: depth_format,
             extent,
 
             render_pass,
             framebuffers,
+
+            image_available_semaphores,
+            render_finished_semaphores,
+            in_flight_fences,
+            images_in_flight,
+            current_frame: 0,
 
             swapchain,
             handle,
@@ -449,18 +477,24 @@ impl SwapchainBuilder {
 }
 
 pub struct Swapchain {
-    images: Vec<vk::Image>,
+    _images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
     depth_images: Vec<vk::Image>,
     depth_image_views: Vec<vk::ImageView>,
     depth_image_memories: Vec<vk::DeviceMemory>,
 
-    format: vk::Format,
-    depth_format: vk::Format,
+    _format: vk::Format,
+    _depth_format: vk::Format,
     extent: vk::Extent2D,
 
     render_pass: vk::RenderPass,
     framebuffers: Vec<vk::Framebuffer>,
+
+    image_available_semaphores: Vec<Semaphore>,
+    render_finished_semaphores: Vec<Semaphore>,
+    in_flight_fences: Vec<Fence>,
+    images_in_flight: Vec<vk::Fence>,
+    current_frame: usize,
 
     swapchain: ash::extensions::khr::Swapchain,
     handle: vk::SwapchainKHR,
@@ -484,6 +518,108 @@ impl Swapchain {
 
     pub fn framebuffers(&self) -> &[vk::Framebuffer] {
         &self.framebuffers
+    }
+
+    pub fn current_frame(&self) -> usize {
+        self.current_frame
+    }
+}
+
+impl Swapchain {
+    pub fn acquire_next_image(&self) -> Result<usize, SwapchainError> {
+        self.device.wait_for_fences(
+            &[&self.in_flight_fences[self.current_frame]],
+            true,
+            std::u64::MAX,
+        )?;
+
+        let result = unsafe {
+            self.swapchain
+                .acquire_next_image(
+                    self.handle,
+                    std::u64::MAX,
+                    self.image_available_semaphores[self.current_frame].vk_handle(),
+                    vk::Fence::null(),
+                )
+                .map_err(|err| SwapchainError::DeviceError(LogicalDeviceError::Other(err.into())))?
+        };
+
+        if result.1 {
+            Err(SwapchainError::Suboptimal)
+        } else {
+            Ok(result.0 as usize)
+        }
+    }
+
+    pub fn submit_command_buffer(
+        &mut self,
+        command_buffer: &CommandBuffer,
+        index: usize,
+    ) -> Result<(), SwapchainError> {
+        // Wait for previous image to finish getting drawn
+        if vk::Handle::as_raw(self.images_in_flight[index]) != 0 {
+            let wait_fences = [self.images_in_flight[index]];
+            unsafe {
+                self.device
+                    .vk_handle()
+                    .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                    .map_err(|err| {
+                        SwapchainError::DeviceError(LogicalDeviceError::Other(err.into()))
+                    })?;
+            };
+        }
+        self.images_in_flight[index] = self.in_flight_fences[self.current_frame].vk_handle();
+
+        // Get GPU to start working on the next frame buffer
+        let wait_semaphores = [self.image_available_semaphores[self.current_frame].vk_handle()];
+        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let signal_semaphores = [self.render_finished_semaphores[self.current_frame].vk_handle()];
+
+        let command_buffers = [command_buffer.vk_handle()];
+        let submit_infos = [vk::SubmitInfo::builder()
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&wait_stages)
+            .command_buffers(&command_buffers)
+            .signal_semaphores(&signal_semaphores)
+            .build()];
+
+        let reset_fences = [&self.in_flight_fences[self.current_frame]];
+        self.device.reset_fences(&reset_fences)?;
+
+        let graphics_queue = self.device.queue(Queue::Graphics);
+        if graphics_queue.is_none() {
+            return Err(SwapchainError::DeviceMissingGraphicsQueue);
+        }
+        let graphics_queue = graphics_queue.unwrap();
+
+        unsafe {
+            self.device
+                .vk_handle()
+                .queue_submit(
+                    graphics_queue.handle,
+                    &submit_infos,
+                    self.in_flight_fences[self.current_frame].vk_handle(),
+                )
+                .map_err(|err| SwapchainError::DeviceError(LogicalDeviceError::Other(err.into())))?
+        };
+
+        // Present the frame that just finished drawing
+        let swapchains = [self.handle];
+        let image_indices = [index as u32];
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&signal_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+
+        unsafe {
+            self.swapchain
+                .queue_present(graphics_queue.handle, &present_info)
+                .map_err(|err| SwapchainError::DeviceError(LogicalDeviceError::Other(err.into())))?
+        };
+
+        self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        Ok(())
     }
 }
 

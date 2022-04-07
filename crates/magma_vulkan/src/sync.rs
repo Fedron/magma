@@ -4,6 +4,7 @@ use ash::vk;
 
 use crate::core::device::{LogicalDevice, LogicalDeviceError};
 
+#[derive(Clone)]
 pub struct Semaphore {
     handle: vk::Semaphore,
     device: Rc<LogicalDevice>,
@@ -37,6 +38,7 @@ impl Drop for Semaphore {
     }
 }
 
+#[derive(Clone)]
 pub struct Fence {
     handle: vk::Fence,
     device: Rc<LogicalDevice>,
