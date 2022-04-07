@@ -104,5 +104,6 @@ fn main() -> Result<()> {
         )?;
     }
 
+    logical_device.wait_for_idle()?;
     Ok(())
 }

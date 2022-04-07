@@ -135,6 +135,14 @@ impl LogicalDevice {
 }
 
 impl LogicalDevice {
+    pub fn wait_for_idle(&self) -> Result<(), LogicalDeviceError> {
+        Ok(unsafe {
+            self.handle
+                .device_wait_idle()
+                .map_err(|err| LogicalDeviceError::Other(err.into()))?
+        })
+    }
+
     pub fn wait_for_fences(
         &self,
         fences: &[&Fence],
