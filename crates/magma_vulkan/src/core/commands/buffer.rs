@@ -130,6 +130,55 @@ impl CommandBuffer {
         self.clear_color.2 = color.2.clamp(0.0, 1.0);
     }
 
+    pub fn set_viewport(&mut self, width: f32, height: f32) -> Result<(), CommandBufferError> {
+        if !self.recording {
+            return Err(CommandBufferError::IncorrectState(
+                CommandBufferState::Recording,
+            ));
+        }
+
+        let viewports = [vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: width as f32,
+            height: height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }];
+
+        unsafe {
+            self.device
+                .vk_handle()
+                .cmd_set_viewport(self.handle, 0, &viewports);
+        };
+
+        Ok(())
+    }
+
+    pub fn set_scissor(&mut self, extent: (u32, u32)) -> Result<(), CommandBufferError> {
+        if !self.recording {
+            return Err(CommandBufferError::IncorrectState(
+                CommandBufferState::Recording,
+            ));
+        }
+
+        let scissors = [vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: vk::Extent2D {
+                width: extent.0,
+                height: extent.1,
+            },
+        }];
+
+        unsafe {
+            self.device
+                .vk_handle()
+                .cmd_set_scissor(self.handle, 0, &scissors);
+        };
+
+        Ok(())
+    }
+
     // TODO: Wrap framebuffer to include an extent
     pub fn begin_render_pass(
         &mut self,

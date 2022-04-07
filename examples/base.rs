@@ -40,10 +40,13 @@ fn main() -> Result<()> {
         .preferred_present_mode(PresentMode::Mailbox)
         .build(logical_device.clone(), &surface)?;
 
-    let shader = ShaderBuilder::new("shaders/simple.vert").build(logical_device.clone())?;
+    let vertex_shader = ShaderBuilder::new("shaders/simple.vert").build(logical_device.clone())?;
+    let fragment_shader =
+        ShaderBuilder::new("shaders/simple.frag").build(logical_device.clone())?;
 
     let pipeline = Pipeline::builder()
-        .add_shader(shader)
+        .add_shader(vertex_shader)
+        .add_shader(fragment_shader)
         .render_pass(swapchain.render_pass())
         .build(logical_device.clone())?;
 
@@ -54,20 +57,28 @@ fn main() -> Result<()> {
             .queue_family(Queue::Graphics)
             .unwrap(),
     )?;
-    command_pool.allocate_buffers(2, CommandBufferLevel::Primary)?;
+    command_pool.allocate_buffers(
+        swapchain.framebuffers().len() as u32,
+        CommandBufferLevel::Primary,
+    )?;
 
-    println!("{:#?}", swapchain.framebuffers().len());
     for (index, buffer) in command_pool.buffers_mut().iter_mut().enumerate() {
         buffer.begin()?;
         buffer.set_clear_color((0.01, 0.01, 0.01));
+
+        let extent = swapchain.extent();
+        buffer.set_viewport(extent.0 as f32, extent.1 as f32)?;
+        buffer.set_scissor(extent.clone())?;
+
         buffer.begin_render_pass(
             swapchain.render_pass(),
             *swapchain.framebuffers().get(index).unwrap(),
-            swapchain.extent(),
+            extent,
         )?;
         buffer.bind_pipeline(&pipeline);
         buffer.draw(3, 1, 0, 0);
         buffer.end_render_pass();
+
         buffer.end()?;
     }
 
