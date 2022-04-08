@@ -1,5 +1,5 @@
 use ash::vk;
-use std::rc::Rc;
+use std::{mem::ManuallyDrop, rc::Rc};
 
 use crate::{
     core::{
@@ -76,6 +76,7 @@ impl Into<vk::PresentModeKHR> for PresentMode {
 pub struct SwapchainBuilder {
     preferred_color_format: ColorFormat,
     preferred_present_mode: PresentMode,
+    old_swapchain: Option<ManuallyDrop<Swapchain>>,
 }
 
 impl SwapchainBuilder {
@@ -83,6 +84,7 @@ impl SwapchainBuilder {
         SwapchainBuilder {
             preferred_color_format: ColorFormat::Unorm,
             preferred_present_mode: PresentMode::Fifo,
+            old_swapchain: None,
         }
     }
 
@@ -93,6 +95,11 @@ impl SwapchainBuilder {
 
     pub fn preferred_present_mode(mut self, present_mode: PresentMode) -> SwapchainBuilder {
         self.preferred_present_mode = present_mode;
+        self
+    }
+
+    pub fn old_swapchain(mut self, swapchain: Swapchain) -> SwapchainBuilder {
+        self.old_swapchain = Some(ManuallyDrop::new(swapchain));
         self
     }
 
@@ -120,7 +127,7 @@ impl SwapchainBuilder {
 
         let surface_format = self.choose_format(&surface.formats());
         let present_mode = self.choose_present_mode(&surface.present_modes());
-        let extent = SwapchainBuilder::choose_extent(surface.capabilities());
+        let extent = self.choose_extent(surface.capabilities());
 
         let image_count = surface.capabilities().min_image_count + 1;
         let image_count = if surface.capabilities().max_image_count > 0
@@ -138,6 +145,11 @@ impl SwapchainBuilder {
             .map(|family| family.index.unwrap())
             .collect();
 
+        let old_swapchain = if self.old_swapchain.is_some() {
+            self.old_swapchain.as_ref().unwrap().handle
+        } else {
+            vk::SwapchainKHR::null()
+        };
         let create_info = vk::SwapchainCreateInfoKHR::builder()
             .surface(surface.vk_handle())
             .min_image_count(image_count)
@@ -151,7 +163,8 @@ impl SwapchainBuilder {
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(present_mode)
             .clipped(true)
-            .image_array_layers(1);
+            .image_array_layers(1)
+            .old_swapchain(old_swapchain);
 
         let swapchain =
             ash::extensions::khr::Swapchain::new(device.instance().vk_handle(), device.vk_handle());
@@ -160,6 +173,12 @@ impl SwapchainBuilder {
                 .create_swapchain(&create_info, None)
                 .map_err(|err| SwapchainError::CantCreate(err.into()))?
         };
+
+        if self.old_swapchain.is_some() {
+            unsafe {
+                ManuallyDrop::drop(&mut self.old_swapchain.unwrap());
+            };
+        }
 
         let images = unsafe {
             swapchain
@@ -273,7 +292,7 @@ impl SwapchainBuilder {
         }
     }
 
-    fn choose_extent(capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
+    fn choose_extent(&self, capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
         if capabilities.current_extent.width != std::u32::MAX {
             capabilities.current_extent
         } else {

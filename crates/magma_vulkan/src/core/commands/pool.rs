@@ -24,8 +24,12 @@ impl CommandPool {
         device: Rc<LogicalDevice>,
         queue_family: &QueueFamily,
     ) -> Result<CommandPool, CommandPoolError> {
-        let create_info =
-            vk::CommandPoolCreateInfo::builder().queue_family_index(queue_family.index.unwrap());
+        let create_info = vk::CommandPoolCreateInfo::builder()
+            .flags(
+                vk::CommandPoolCreateFlags::TRANSIENT
+                    | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            )
+            .queue_family_index(queue_family.index.unwrap());
 
         let handle = unsafe {
             device

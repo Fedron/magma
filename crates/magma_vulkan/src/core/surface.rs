@@ -115,11 +115,11 @@ impl Surface {
         use winapi::um::libloaderapi::GetModuleHandleW;
         use winit::platform::windows::WindowExtWindows;
 
-        let hwnd = window.hwnd() as *const c_void;
+        let hwnd = window.hwnd();
         let hinstance = GetModuleHandleW(std::ptr::null()) as *const c_void;
         let create_info = vk::Win32SurfaceCreateInfoKHR::builder()
             .hinstance(hinstance)
-            .hwnd(hwnd);
+            .hwnd(hwnd as *const c_void);
 
         let surface = Win32Surface::new(entry, instance);
         surface
@@ -143,6 +143,34 @@ impl Surface {
 
     pub fn present_modes(&self) -> &[vk::PresentModeKHR] {
         &self.present_modes
+    }
+}
+
+impl Surface {
+    pub fn update(&mut self, physical_device: &PhysicalDevice) -> Result<(), SurfaceError> {
+        let capabilities = unsafe {
+            self.surface
+                .get_physical_device_surface_capabilities(physical_device.vk_handle(), self.handle)
+                .map_err(|_| SurfaceError::FailedQuery(SurfaceQueryType::Capabilities))?
+        };
+
+        let formats = unsafe {
+            self.surface
+                .get_physical_device_surface_formats(physical_device.vk_handle(), self.handle)
+                .map_err(|_| SurfaceError::FailedQuery(SurfaceQueryType::Format))?
+        };
+
+        let present_modes = unsafe {
+            self.surface
+                .get_physical_device_surface_present_modes(physical_device.vk_handle(), self.handle)
+                .map_err(|_| SurfaceError::FailedQuery(SurfaceQueryType::PresentModes))?
+        };
+
+        self.capabilities = capabilities;
+        self.formats = formats;
+        self.present_modes = present_modes;
+
+        Ok(())
     }
 }
 

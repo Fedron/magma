@@ -103,6 +103,7 @@ impl ShaderBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct Shader {
     entry_point: String,
     stage: ShaderStage,
