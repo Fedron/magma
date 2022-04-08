@@ -120,6 +120,7 @@ impl CommandBuffer {
                 .end_command_buffer(self.handle)
                 .map_err(|err| CommandBufferError::DeviceError(err.into()))?;
         };
+        self.recording = false;
 
         Ok(())
     }
