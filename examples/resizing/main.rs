@@ -79,16 +79,34 @@ fn main() -> Result<()> {
     )?;
 
     let mut should_close = false;
+    let mut is_minimized = false;
     while !should_close {
         // Poll for events
         event_loop.run_return(|event, _, control_flow| match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => should_close = true,
+                WindowEvent::Resized(size) => {
+                    // We need to check for the case that the window was minimized for when we want to recreate the
+                    // swapchain as if we try to create framebuffers with a size of (0, 0) then Vulkan will complain
+                    // and the app will crash.
+                    if size.width == 0 && size.height == 0 {
+                        is_minimized = true
+                    } else {
+                        is_minimized = false
+                    }
+                }
                 _ => {}
             },
             Event::MainEventsCleared => *control_flow = ControlFlow::Exit,
             _ => {}
         });
+
+        // If we are minimized, skip the draw loop where would recreate the swapchain since acquire_next_image()
+        // would return Swapchain::Suboptimal. Skipping the draw loop means we won't try to recreate the swapchain
+        // until the window has a size of greater than (0, 0)
+        if is_minimized {
+            continue;
+        }
 
         // Draw
         let result = swapchain.acquire_next_image();
