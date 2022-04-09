@@ -2,6 +2,8 @@ use std::mem::ManuallyDrop;
 
 #[cfg(target_os = "windows")]
 use ash::extensions::khr::Win32Surface;
+#[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+use ash::extensions::khr::XlibSurface;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
@@ -17,7 +19,7 @@ use crate::{
 pub enum InstanceError {
     #[error(transparent)]
     LoadLibraryError(#[from] ash::LoadingError),
-    #[error("Creating instance failed")]
+    #[error("Creating instance failed: {0}")]
     CantCreate(VulkanError),
     #[error("Missing required extensions")]
     MissingExtensions(Vec<String>),
@@ -117,6 +119,15 @@ impl Instance {
         vec![
             Surface::name().as_ptr(),
             Win32Surface::name().as_ptr(),
+            DebugUtils::name().as_ptr(),
+        ]
+    }
+
+    #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+    fn required_extension_names() -> Vec<*const i8> {
+        vec![
+            Surface::name().as_ptr(),
+            XlibSurface::name().as_ptr(),
             DebugUtils::name().as_ptr(),
         ]
     }

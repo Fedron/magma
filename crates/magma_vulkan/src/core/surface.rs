@@ -14,6 +14,8 @@ pub enum SurfaceError {
     MissingQueueFamily(Queue),
     #[error("Failed to create a surface for Windows")]
     CantCreateWin32Surface(VulkanError),
+    #[error("Failed to create a surface for Linux: {0}")]
+    CantCreateXlibSurface(VulkanError),
     #[error("Failed to query the surface for properties")]
     FailedQuery(SurfaceQueryType),
 }
@@ -125,6 +127,27 @@ impl Surface {
         surface
             .create_win32_surface(&create_info, None)
             .map_err(|err| SurfaceError::CantCreateWin32Surface(err.into()))
+    }
+
+    #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
+    unsafe fn create_surface(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        window: &winit::window::Window,
+    ) -> Result<vk::SurfaceKHR, SurfaceError> {
+        use ash::extensions::khr::XlibSurface;
+        use winit::platform::unix::WindowExtUnix;
+
+        let x11_display = window.xlib_display().unwrap();
+        let x11_window = window.xlib_window().unwrap();
+        let create_info = vk::XlibSurfaceCreateInfoKHR::builder()
+            .window(x11_window as vk::Window)
+            .dpy(x11_display as *mut vk::Display);
+
+        let surface = XlibSurface::new(entry, instance);
+        surface
+            .create_xlib_surface(&create_info, None)
+            .map_err(|err| SurfaceError::CantCreateXlibSurface(err.into()))
     }
 }
 
