@@ -1,3 +1,5 @@
+//! This crate provides a safe high-level abstraction around Vulkan
+
 extern crate log;
 
 mod core;
@@ -7,6 +9,7 @@ mod utils;
 
 use ash::vk::Result as VkResult;
 
+/// Errors that can be returned by Vulkan
 #[derive(thiserror::Error, Debug)]
 pub enum VulkanError {
     #[error("Host memory allocation has failed")]

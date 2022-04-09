@@ -1,3 +1,5 @@
+//! This module wraps the creation of a graphics pipeline and its associated resources
+
 use ash::vk;
 use std::rc::Rc;
 
@@ -10,50 +12,64 @@ use crate::{core::device::LogicalDevice, VulkanError};
 pub mod config;
 pub mod shader;
 
+/// Errors that can be thrown by the pipeline
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineError {
     #[error("Can't create a pipeline with no shaders")]
     NoShaders,
     #[error("Missing shader stage {0} to complete pipeline")]
     MissingShaderStage(ShaderStage),
-    #[error("Failed to create pipeline layout")]
+    #[error("Failed to create pipeline layout: {0}")]
     CantCreateLayout(VulkanError),
     #[error("No render pass was set for the pipeline")]
     MissingRenderPass,
-    #[error("Failed to create Vulkan pipeline")]
+    #[error("Failed to create Vulkan pipeline: {0}")]
     CantCreatePipeline(VulkanError),
 }
 
+/// Allows you to create a graphics pipeline
+#[derive(Default)]
 pub struct PipelineBuilder {
+    /// Collection of shaders the pipeline will consist of
     shaders: Vec<Shader>,
+    /// Render pass to use for this pipeline
     render_pass: Option<vk::RenderPass>,
+    /// Fixed function configuration
     config: PipelineConfigInfo,
 }
 
 impl PipelineBuilder {
+    /// Creates a new default [PipelineBuilder]
     pub fn new() -> PipelineBuilder {
-        PipelineBuilder {
-            shaders: Vec::new(),
-            render_pass: None,
-            config: PipelineConfigInfo::default(),
-        }
+        PipelineBuilder::default()
     }
 
+    /// Adds a [Shader] to the [PipelineBuilder]
     pub fn add_shader(mut self, shader: Shader) -> PipelineBuilder {
         self.shaders.push(shader);
         self
     }
 
+    /// Sets the configuration of the fixed function stages in the [Pipeline]
     pub fn config(mut self, config: PipelineConfigInfo) -> PipelineBuilder {
         self.config = config;
         self
     }
 
+    /// Sets the render pass to use for the pipeline
     pub fn render_pass(mut self, render_pass: vk::RenderPass) -> PipelineBuilder {
         self.render_pass = Some(render_pass);
         self
     }
 
+    /// Builds a [Pipeline] from the provided configuration in the [PipelineBuilder]
+    ///
+    /// # Errors
+    /// - [PipelineError::MissingShaderStage] - If a shader with [ShaderStage::Fragment] is provided then a shader with
+    /// [ShaderStage::Vertex] must also be provided.
+    /// - [PipelineError::MissingRenderPass] - You need to provide a render pass for the pipeiline
+    /// - [PipelineError::CantCreateLayout] and [PipelineError::CantCreatePipeline] - Failed to
+    /// create required Vulkan objects, see the contained [VulkanError] for more information
     pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline, PipelineError> {
         use std::ffi::CStr;
 
@@ -132,20 +148,26 @@ impl PipelineBuilder {
     }
 }
 
+/// Represents a Graphics pipeline that can be used to draw to a surface
 pub struct Pipeline {
+    /// Opaque handle to Vulkan layout used to create the pipeline
     layout: vk::PipelineLayout,
+    /// Opaque handle to Vulkan Pipeline
     handle: vk::Pipeline,
+    /// Logical device this pipeline belongs to
     device: Rc<LogicalDevice>,
 }
 
 impl Pipeline {
+    /// Creates a new [PipelineBuilder]
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::new()
     }
 }
 
 impl Pipeline {
-    pub fn vk_handle(&self) -> vk::Pipeline {
+    /// Returns the handle to the Vulkan pipeline
+    pub(crate) fn vk_handle(&self) -> vk::Pipeline {
         self.handle
     }
 }
