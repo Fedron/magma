@@ -1,6 +1,7 @@
 use ash::vk;
 use std::rc::Rc;
 
+/// Wraps fixed function configuration for creating a Vulkan graphics pipeline
 pub struct PipelineConfigInfo {
     pub viewport_info: vk::PipelineViewportStateCreateInfo,
     pub input_assembly_info: vk::PipelineInputAssemblyStateCreateInfo,

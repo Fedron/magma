@@ -93,7 +93,7 @@ impl PipelineBuilder {
         for shader in self.shaders.iter() {
             shader_stages.push(
                 vk::PipelineShaderStageCreateInfo::builder()
-                    .module(shader.module())
+                    .module(shader.vk_module())
                     .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") })
                     .stage(Into::<vk::ShaderStageFlags>::into(*shader.stage()))
                     .build(),

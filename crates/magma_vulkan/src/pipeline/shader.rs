@@ -9,6 +9,7 @@ use std::{
 
 use crate::{core::device::LogicalDevice, VulkanError};
 
+/// Possible errors that could be returned by a [Shader]
 #[derive(thiserror::Error, Debug)]
 pub enum ShaderError {
     #[error("The shader file could not be found")]
@@ -19,10 +20,11 @@ pub enum ShaderError {
     CantParseSpv(String),
     #[error("Can't create a shader as its shader stage is not supported")]
     UnsupportedShaderStage,
-    #[error("Failed to create a Vulkan shader module")]
+    #[error("Failed to create a Vulkan shader module {0}")]
     BuildFail(VulkanError),
 }
 
+/// Supported shader stages
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShaderStage {
     Vertex,
@@ -50,15 +52,22 @@ impl Into<vk::ShaderStageFlags> for ShaderStage {
     }
 }
 
+/// Helps to build a shader and validate its correctness
 pub struct ShaderBuilder {
+    /// File path to the shader GLSL code
     file_path: &'static str,
 }
 
 impl ShaderBuilder {
+    /// Creates a new [ShaderBuilder] with the `file_path`
     pub fn new(file_path: &'static str) -> ShaderBuilder {
         ShaderBuilder { file_path }
     }
 
+    /// Creates a [Shader] and validates that it is correct
+    ///
+    /// # Validation
+    /// TODO
     pub fn build(self, device: Rc<LogicalDevice>) -> Result<Shader, ShaderError> {
         use std::fs::File;
         use std::path::Path;
@@ -103,31 +112,40 @@ impl ShaderBuilder {
     }
 }
 
+/// Wraps a Vulkan shader module
 #[derive(Clone)]
 pub struct Shader {
+    /// Entry point into the shader code
     entry_point: String,
+    /// Shader stage
     stage: ShaderStage,
 
+    /// Opaque handle to the Vulkan shader module
     module: vk::ShaderModule,
+    /// Logical device the shader belongs to
     device: Rc<LogicalDevice>,
 }
 
 impl Shader {
+    /// Creates a new [ShaderBuilder] with a `file_path` set
     pub fn builder(file_path: &'static str) -> ShaderBuilder {
         ShaderBuilder::new(file_path)
     }
 }
 
 impl Shader {
+    /// Returns the entry point into the shader code
     pub fn entry_point(&self) -> &String {
         &self.entry_point
     }
 
+    /// Returns the shader stage
     pub fn stage(&self) -> &ShaderStage {
         &self.stage
     }
 
-    pub fn module(&self) -> vk::ShaderModule {
+    /// Returns the handle to the Vulkan shader module
+    pub(crate) fn vk_module(&self) -> vk::ShaderModule {
         self.module
     }
 }
