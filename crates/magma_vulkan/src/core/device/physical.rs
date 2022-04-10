@@ -7,6 +7,7 @@ use crate::{
 
 use super::{DeviceExtension, Queue};
 
+/// Errors that the physical device can throw
 #[derive(thiserror::Error, Debug)]
 pub enum PhysicalDeviceError {
     #[error("There are no Vulkan capable devices on your machine")]
@@ -21,6 +22,7 @@ pub enum PhysicalDeviceError {
     Other(#[from] VulkanError),
 }
 
+/// Possible physical device types
 pub enum PhysicalDeviceType {
     CPU,
     IntegratedGPU,
@@ -29,14 +31,19 @@ pub enum PhysicalDeviceType {
     Other,
 }
 
+/// Wraps the steps required to create a [PhysicalDevice]
 pub struct PhysicalDeviceBuilder {
+    /// Queue families to create the physical device with
     queue_families: Vec<QueueFamily>,
+    /// Type of device to use, if found
     // FIXME: Not being taken into account
     preferred_type: PhysicalDeviceType,
+    /// Device extensions to enable on the physical device
     device_extensions: Vec<DeviceExtension>,
 }
 
 impl PhysicalDeviceBuilder {
+    /// Creates a new [PhysicalDeviceBuilder]
     pub fn new() -> PhysicalDeviceBuilder {
         PhysicalDeviceBuilder {
             queue_families: Vec::new(),
@@ -45,21 +52,25 @@ impl PhysicalDeviceBuilder {
         }
     }
 
+    /// Adds a queue family to create the physical device with
     pub fn add_queue_family(mut self, family: QueueFamily) -> PhysicalDeviceBuilder {
         self.queue_families.push(family);
         self
     }
 
+    /// Sets the preferred type of physical device to use
     pub fn preferred_type(mut self, ty: PhysicalDeviceType) -> PhysicalDeviceBuilder {
         self.preferred_type = ty;
         self
     }
 
+    /// Sets the device extensions to create the physical device with
     pub fn device_extensions(mut self, extensions: &[DeviceExtension]) -> PhysicalDeviceBuilder {
         self.device_extensions = extensions.to_vec();
         self
     }
 
+    /// Creates a [PhysicalDevice]
     pub fn build(mut self, instance: &Instance) -> Result<PhysicalDevice, PhysicalDeviceError> {
         let handle = self.pick_physical_device(instance)?;
 
@@ -97,6 +108,11 @@ impl PhysicalDeviceBuilder {
 }
 
 impl PhysicalDeviceBuilder {
+    /// Finds the first physical device that matches the requirements of the
+    /// [PhysicalDeviceBuilder].
+    ///
+    /// If no device matches the requirements then [PhysicalDeviceError::NoSuitableDevice] is
+    /// returned.
     fn pick_physical_device(
         &mut self,
         instance: &Instance,
@@ -122,6 +138,8 @@ impl PhysicalDeviceBuilder {
         }
     }
 
+    /// Checks wether the Vulkan physical device contains the requried queue families and supports
+    /// the required device extensions.
     fn is_device_suitable(
         &mut self,
         instance: &Instance,
@@ -133,6 +151,11 @@ impl PhysicalDeviceBuilder {
         Ok(true)
     }
 
+    /// Goes through all the queue families of the physical device, finding the ones required by
+    /// the [PhysicalDeviceBuilder].
+    ///
+    /// If not all the required queue families were found
+    /// [PhysicalDeviceError::IncompleteQueueFamilies] is returned.
     fn find_queue_families(
         &mut self,
         instance: &Instance,
@@ -168,6 +191,8 @@ impl PhysicalDeviceBuilder {
         }
     }
 
+    /// Checks wether the physical device supports all the required device extensions in the
+    /// [PhysicalDeviceBuilder].
     fn check_device_extension_support(
         &self,
         instance: &Instance,
@@ -206,48 +231,66 @@ impl PhysicalDeviceBuilder {
     }
 }
 
+/// Wraps a Vulkan physical device and its capabilities
 pub struct PhysicalDevice {
+    /// List of all enabled device extensions
     extensions: Vec<DeviceExtension>,
+    /// List of queue families the physical device supports (that it was created with)
     queue_families: Vec<QueueFamily>,
 
+    /// Vulkan physical device properties
     properties: vk::PhysicalDeviceProperties,
+    /// Vulkan physical device features
     features: vk::PhysicalDeviceFeatures,
+    /// Vulkan physical device memory properties
     memory_properties: vk::PhysicalDeviceMemoryProperties,
 
+    /// Opaque handle to Vulkan physical device
     handle: vk::PhysicalDevice,
 }
 
 impl PhysicalDevice {
+    /// Creates a new [PhysicalDeviceBuilder]
     pub fn builder() -> PhysicalDeviceBuilder {
         PhysicalDeviceBuilder::new()
     }
 }
 
 impl PhysicalDevice {
-    pub fn vk_handle(&self) -> vk::PhysicalDevice {
+    /// Returns the Vulkan handle to the physic device
+    pub(crate) fn vk_handle(&self) -> vk::PhysicalDevice {
         self.handle
     }
 
+    /// Returns a list of all the enabled device extensions
     pub fn enabled_extensions(&self) -> &[DeviceExtension] {
         &self.extensions
     }
 
+    /// Returns a list of all the queue families the device was created with
     pub fn queue_families(&self) -> &[QueueFamily] {
         &self.queue_families
     }
 
+    /// Looks through the device's queue family and tries to find a family that matches the type
+    /// `ty`.
+    ///
+    /// If no queue families have the type `ty`, then `None` is returned.
     pub fn queue_family(&self, ty: Queue) -> Option<&QueueFamily> {
         self.queue_families.iter().find(|family| family.ty == ty)
     }
 
+    /// Returns the Vulkan physical device properties
     pub fn properties(&self) -> &vk::PhysicalDeviceProperties {
         &self.properties
     }
 
+    /// Returns the Vulkan physical device features
     pub fn features(&self) -> &vk::PhysicalDeviceFeatures {
         &self.features
     }
 
+    /// Returns the Vulkan physical device memory properties
     pub fn memory_properties(&self) -> &vk::PhysicalDeviceMemoryProperties {
         &self.memory_properties
     }

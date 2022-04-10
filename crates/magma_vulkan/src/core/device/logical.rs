@@ -1,5 +1,4 @@
 use std::ffi::CString;
-
 use ash::vk;
 
 use super::{PhysicalDevice, Queue};
@@ -13,6 +12,7 @@ use crate::{
     VulkanError,
 };
 
+/// Errors that could be thrown by the logical device
 #[derive(thiserror::Error, Debug)]
 pub enum LogicalDeviceError {
     #[error("Failed to create a logical device")]
@@ -27,15 +27,21 @@ pub enum LogicalDeviceError {
     Other(#[from] VulkanError),
 }
 
+/// Wraps a Vulkan logical devcie, allowing you to interface with a [PhysicalDevice]
 pub struct LogicalDevice {
+    /// Vulkan handles to all of the queues of the [PhysicalDevice]
     queues: Vec<QueueHandle>,
 
+    /// [PhysicalDevice] this logical device interfaces with
     physical_device: PhysicalDevice,
+    /// Opaque handle to Vulkan logical device
     handle: ash::Device,
+    /// [Instance] this device is using
     instance: Instance,
 }
 
 impl LogicalDevice {
+    /// Creates a new [LogicalDevice]
     pub fn new(
         instance: Instance,
         physical_device: PhysicalDevice,
@@ -113,28 +119,35 @@ impl LogicalDevice {
 }
 
 impl LogicalDevice {
+    /// Returns the Vulkan handle to the logical device
     pub(crate) fn vk_handle(&self) -> &ash::Device {
         &self.handle
     }
 
+    /// Returns a list of [QueueHandles][QueueHandle] to each of the
+    /// [PhysicalDevice's][PhysicalDevice] queue families
     pub fn queues(&self) -> &[QueueHandle] {
         &self.queues
     }
 
+    /// Returns a [QueueHandle] to a queue with the type `ty`
     pub fn queue(&self, ty: Queue) -> Option<&QueueHandle> {
         self.queues.iter().find(|queue| queue.ty == ty)
     }
 
+    /// Returns the [PhysicalDevcie] this logical device is interfacing with
     pub fn physical_device(&self) -> &PhysicalDevice {
         &self.physical_device
     }
 
+    /// Returns the [Instance] this logical device was created with
     pub fn instance(&self) -> &Instance {
         &self.instance
     }
 }
 
 impl LogicalDevice {
+    /// Waits for the [PhysicalDevice] to idle/stop using resources
     pub fn wait_for_idle(&self) -> Result<(), LogicalDeviceError> {
         Ok(unsafe {
             self.handle
@@ -143,6 +156,7 @@ impl LogicalDevice {
         })
     }
 
+    /// Waits the logical device until `wait_all` fences are signaled by the host
     pub fn wait_for_fences(
         &self,
         fences: &[&Fence],
@@ -163,6 +177,7 @@ impl LogicalDevice {
         Ok(())
     }
 
+    /// Resest the Vulkan fences
     pub fn reset_fences(&self, fences: &[&Fence]) -> Result<(), LogicalDeviceError> {
         let fences: Vec<vk::Fence> = fences.iter().map(|&fence| fence.vk_handle()).collect();
         unsafe {
@@ -174,6 +189,7 @@ impl LogicalDevice {
         Ok(())
     }
 
+    /// Creates a Vulkan image and Vulkan device memory
     pub fn create_image(
         &self,
         create_info: &vk::ImageCreateInfo,
@@ -207,6 +223,8 @@ impl LogicalDevice {
         Ok((image, device_memory))
     }
 
+    /// Finds a memory type on the [PhysicalDevice] that matches the `type_filter` and
+    /// `required_properties`.
     pub fn find_memory_type(
         &self,
         type_filter: u32,
@@ -229,6 +247,7 @@ impl LogicalDevice {
         Err(LogicalDeviceError::NoSupportedMemoryType)
     }
 
+    /// Finds a supported format on the [PhysicalDevice] from the list of `candidates`.
     pub fn find_supported_format(
         &self,
         candidates: &[vk::Format],

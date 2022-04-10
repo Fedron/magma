@@ -1,5 +1,6 @@
-use std::fmt::Display;
+//! This module wraps Vulkan physical and logical devices
 
+use std::fmt::Display;
 use ash::vk;
 
 mod logical;
@@ -10,8 +11,10 @@ pub use physical::{
     PhysicalDevice, PhysicalDeviceBuilder, PhysicalDeviceError, PhysicalDeviceType,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Vulkan device extensions that are supported my [`magma_vulkan`]
+///
 /// https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#extension-appendices-list
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DeviceExtension {
     Swapchain,
 }
@@ -24,6 +27,7 @@ impl Display for DeviceExtension {
     }
 }
 
+/// Represents Vulkan queue flags
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Queue {
     Graphics,
@@ -63,18 +67,25 @@ impl Into<vk::QueueFlags> for Queue {
     }
 }
 
+/// Wraps a Vulkan Queue
 pub struct QueueHandle {
+    /// Opaque handle to Vulkan Queue
     pub(crate) handle: vk::Queue,
+    /// Type of the Queue
     pub ty: Queue,
 }
 
+/// Wraps the index of a given Queue type
 #[derive(Clone, Copy, Debug)]
 pub struct QueueFamily {
+    /// Type of the queue family
     pub ty: Queue,
+    /// Index on the device where the queue is
     pub index: Option<u32>,
 }
 
 impl QueueFamily {
+    /// Creates a new [QueueFamily] of the type setting the index to `None`
     pub fn new(ty: Queue) -> QueueFamily {
         QueueFamily { ty, index: None }
     }
