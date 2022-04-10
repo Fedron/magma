@@ -30,6 +30,7 @@ pub enum InstanceError {
     Other(VulkanError),
 }
 
+/// Wraps a Vulkan instance and loaded library
 pub struct Instance {
     /// Handle to the created debugger
     debugger: ManuallyDrop<Option<Debugger>>,
