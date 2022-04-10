@@ -6,6 +6,7 @@ use crate::{
     VulkanError,
 };
 
+/// Errors that could be thrown by the surface
 #[derive(thiserror::Error, Debug)]
 pub enum SurfaceError {
     #[error("Can't create a surface on the device provided as it doesn't have the DeviceExtension::Swapchain")]
@@ -20,6 +21,7 @@ pub enum SurfaceError {
     FailedQuery(SurfaceQueryType),
 }
 
+/// Represent what to query on the [Surface]
 #[derive(Debug)]
 pub enum SurfaceQueryType {
     Capabilities,
@@ -28,16 +30,23 @@ pub enum SurfaceQueryType {
     SurfaceSupport,
 }
 
+/// Wraps a platform-specific Vulkan surface and its properties
 pub struct Surface {
+    /// Vulkan surface capabilities
     capabilities: vk::SurfaceCapabilitiesKHR,
+    /// List of supported Vulkan surface formats
     formats: Vec<vk::SurfaceFormatKHR>,
+    /// List of supported present modes
     present_modes: Vec<vk::PresentModeKHR>,
 
+    /// Surface extension used by the Vulkan surface
     surface: ash::extensions::khr::Surface,
+    /// Opaque handle to Vulkan surface
     handle: vk::SurfaceKHR,
 }
 
 impl Surface {
+    /// Creates a new [Surface]
     pub fn new(
         instance: &Instance,
         physical_device: &PhysicalDevice,
@@ -106,6 +115,7 @@ impl Surface {
         })
     }
 
+    /// Creates a Vulkan surface for the Windows platform
     #[cfg(target_os = "windows")]
     unsafe fn create_surface(
         entry: &ash::Entry,
@@ -129,6 +139,7 @@ impl Surface {
             .map_err(|err| SurfaceError::CantCreateWin32Surface(err.into()))
     }
 
+    /// Creates a Vulkan surface for the Linux platform
     #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
     unsafe fn create_surface(
         entry: &ash::Entry,
@@ -152,24 +163,30 @@ impl Surface {
 }
 
 impl Surface {
+    /// Returns the vulkan handle to the Vulkan surface
     pub(crate) fn vk_handle(&self) -> vk::SurfaceKHR {
         self.handle
     }
 
+    /// Returns the Vulkan surface capabilities of the [Surface]
     pub fn capabilities(&self) -> &vk::SurfaceCapabilitiesKHR {
         &self.capabilities
     }
 
+    /// Returns a list of supported Vulkan surface formats
     pub fn formats(&self) -> &[vk::SurfaceFormatKHR] {
         &self.formats
     }
 
+    /// Returns a list of supported present modes
     pub fn present_modes(&self) -> &[vk::PresentModeKHR] {
         &self.present_modes
     }
 }
 
 impl Surface {
+    /// Updates the `capabilities`, `formats`, and `present_modes` of the [Surface] by query the
+    /// [PhysicalDevice].
     pub fn update(&mut self, physical_device: &PhysicalDevice) -> Result<(), SurfaceError> {
         let capabilities = unsafe {
             self.surface
