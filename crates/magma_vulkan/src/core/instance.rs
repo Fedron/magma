@@ -15,6 +15,7 @@ use crate::{
     utils, VulkanError,
 };
 
+/// Errors that can be thrown by the Vulkan instance
 #[derive(thiserror::Error, Debug)]
 pub enum InstanceError {
     #[error(transparent)]
@@ -30,12 +31,18 @@ pub enum InstanceError {
 }
 
 pub struct Instance {
+    /// Handle to the created debugger
     debugger: ManuallyDrop<Option<Debugger>>,
+    /// Opaque handle to Vulkan instance
     handle: ash::Instance,
+    /// Opaque handle to loaded Vulkan library
     entry: ash::Entry,
 }
 
 impl Instance {
+    /// Creates a new instance that loads the Vulkan library
+    ///
+    /// Automatically creates a [Debugger] if `magma` is being built in debug mode
     pub fn new() -> Result<Instance, InstanceError> {
         let entry =
             unsafe { ash::Entry::load().map_err(|err| InstanceError::LoadLibraryError(err))? };
@@ -87,6 +94,9 @@ impl Instance {
         })
     }
 
+    /// Checks whether the instance supports all the extensions needed
+    ///
+    /// See [`Instance::required_extension_names`]
     fn check_required_extensions(entry: &ash::Entry) -> Result<(), InstanceError> {
         let supported_extension_names = entry
             .enumerate_instance_extension_properties(None)
@@ -114,6 +124,7 @@ impl Instance {
         }
     }
 
+    /// Gets the names of all the required extensions on Windows
     #[cfg(all(windows))]
     fn required_extension_names() -> Vec<*const i8> {
         vec![
@@ -123,6 +134,7 @@ impl Instance {
         ]
     }
 
+    /// Gets the names of al the required exetensions on Linux
     #[cfg(all(unix, not(target_os = "android"), not(target_os = "macos")))]
     fn required_extension_names() -> Vec<*const i8> {
         vec![
@@ -134,10 +146,12 @@ impl Instance {
 }
 
 impl Instance {
+    /// Returns the handle to the loaded Vulkan library
     pub(crate) fn entry(&self) -> &ash::Entry {
         &self.entry
     }
 
+    /// Returns the handle to the Vulkan instance
     pub(crate) fn vk_handle(&self) -> &ash::Instance {
         &self.handle
     }
