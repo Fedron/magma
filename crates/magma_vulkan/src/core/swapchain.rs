@@ -11,8 +11,10 @@ use crate::{
     VulkanError,
 };
 
+/// Maximum number of frames to keep in flight
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
+/// Errors that could be returned by the [Swapchain]
 #[derive(thiserror::Error, Debug)]
 pub enum SwapchainError {
     #[error("Failed to create Vulkan swapchain: {0}")]
@@ -39,6 +41,7 @@ pub enum SwapchainError {
     DeviceError(#[from] LogicalDeviceError),
 }
 
+/// Possible color formats
 #[derive(Clone, Copy)]
 pub enum ColorFormat {
     Srgb,
@@ -54,6 +57,7 @@ impl Into<vk::Format> for ColorFormat {
     }
 }
 
+/// Possible present modes
 #[derive(Clone, Copy)]
 pub enum PresentMode {
     Immediate,
@@ -73,13 +77,18 @@ impl Into<vk::PresentModeKHR> for PresentMode {
     }
 }
 
+/// Wraps the steps needed to create a [Swapchain]
 pub struct SwapchainBuilder {
+    /// Preferred color format to use
     preferred_color_format: ColorFormat,
+    /// Preferred present mode to use
     preferred_present_mode: PresentMode,
+    /// Old [Swapchain] to create the new [Swapchain] from
     old_swapchain: Option<ManuallyDrop<Swapchain>>,
 }
 
 impl SwapchainBuilder {
+    /// Creates a new [SwapchainBuilder]
     pub fn new() -> SwapchainBuilder {
         SwapchainBuilder {
             preferred_color_format: ColorFormat::Unorm,
@@ -88,21 +97,33 @@ impl SwapchainBuilder {
         }
     }
 
+    /// Sets the preferred color format
     pub fn preferred_color_format(mut self, color_format: ColorFormat) -> SwapchainBuilder {
         self.preferred_color_format = color_format;
         self
     }
 
+    /// Sets the preferred present mode
     pub fn preferred_present_mode(mut self, present_mode: PresentMode) -> SwapchainBuilder {
         self.preferred_present_mode = present_mode;
         self
     }
 
+    /// Sets the old [Swapchain] to base the new [Swapchain] from
     pub fn old_swapchain(mut self, swapchain: Swapchain) -> SwapchainBuilder {
         self.old_swapchain = Some(ManuallyDrop::new(swapchain));
         self
     }
 
+    /// Creates a new [Swapchain]. The swapchain will crate framebuffers for each image created by
+    /// the Vulkan swapchain. Each framebuffer and image will have a color and depth buffer
+    /// attachment.
+    ///
+    /// If the surface doesn't support the `preferred_color_format`, it will fallback to
+    /// [ColorFormat::Unorm].
+    ///
+    /// If the surface doesn't support the `preferred_present_mode`, it will fallback to using
+    /// [PresentMode::Fifo].
     pub fn build(
         self,
         device: Rc<LogicalDevice>,
@@ -264,6 +285,9 @@ impl SwapchainBuilder {
 }
 
 impl SwapchainBuilder {
+    /// Tries to find `preferred_color_format` in the [Surface] supported color formats, will
+    /// return the first supported format on the surface if the preferred color format is not
+    /// found.
     fn choose_format(&self, available_formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
         for available_format in available_formats {
             if available_format.format == self.preferred_color_format.into()
@@ -280,6 +304,8 @@ impl SwapchainBuilder {
         available_formats.first().unwrap().clone()
     }
 
+    /// Returns the `preferred_present_mode` if supported by the [Surface], otherwise returns
+    /// [PresentMode::Fifo].
     fn choose_present_mode(
         &self,
         available_present_modes: &[vk::PresentModeKHR],
@@ -292,6 +318,8 @@ impl SwapchainBuilder {
         }
     }
 
+    /// Chooses the extent of the swapchain by clapming it to the [Surface] min and max image
+    /// extent.
     fn choose_extent(&self, capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
         if capabilities.current_extent.width != std::u32::MAX {
             capabilities.current_extent
@@ -309,6 +337,7 @@ impl SwapchainBuilder {
         }
     }
 
+    /// Creates a Vulkan image view for every image in the [Swapchain]
     fn create_image_views(
         device: &ash::Device,
         surface_format: vk::Format,
@@ -344,6 +373,7 @@ impl SwapchainBuilder {
         image_views
     }
 
+    /// Creates a render pass with a color and depth stencil attachment
     fn create_render_pass(
         device: &ash::Device,
         surface_format: vk::Format,
@@ -412,6 +442,8 @@ impl SwapchainBuilder {
         }
     }
 
+    /// Creates images, image views, and device memory for the depth stencil attachment for evey color
+    /// image in the [Swapchain]
     fn create_depth_resources(
         device: &LogicalDevice,
         depth_format: &vk::Format,
@@ -466,6 +498,8 @@ impl SwapchainBuilder {
         Ok((depth_images, depth_image_memories, depth_image_views))
     }
 
+    /// Creates a Vulkan framebuffer with a color and depth stencil attachment for every image in
+    /// the [Swapchain]
     fn create_framebuffers(
         device: &ash::Device,
         render_pass: vk::RenderPass,
@@ -495,56 +529,86 @@ impl SwapchainBuilder {
     }
 }
 
+/// Wraps a Vulkan swapchain and holds the images and framebuffers for drawing to
 pub struct Swapchain {
+    /// List of all Vulkan images for the [Swapchain]
     _images: Vec<vk::Image>,
+    /// List of all Vulkan image views for every image
     image_views: Vec<vk::ImageView>,
+    /// List of Vulkan images for use in the depth stencil attachment
     depth_images: Vec<vk::Image>,
+    /// List of Vulkan image views for every depth image
     depth_image_views: Vec<vk::ImageView>,
+    /// List of Vulkan device memory for every depth image
     depth_image_memories: Vec<vk::DeviceMemory>,
 
+    /// Color format of the [Swapchain]
     _format: vk::Format,
+    /// Depth format of the [Swapchain]
     _depth_format: vk::Format,
+    /// Extent of the [Swapchain]
     extent: vk::Extent2D,
 
+    /// The main render pass of the [Swapchain]
     render_pass: vk::RenderPass,
+    /// List of all the framebuffers that can be drawn to and presented
     framebuffers: Vec<vk::Framebuffer>,
 
+    /// Semaphores for all images that can be drawn to
     image_available_semaphores: Vec<Semaphore>,
+    /// Semaphores for all images that are ready to be presented
     render_finished_semaphores: Vec<Semaphore>,
+    /// Fences for all fences whose images are in flight
     in_flight_fences: Vec<Fence>,
+    /// Fences for all images in flight
     images_in_flight: Vec<vk::Fence>,
+    /// Index of framebuffer being presented
     current_frame: usize,
 
+    /// Vulkan swapchain extension used to created the [Swapchain]
     swapchain: ash::extensions::khr::Swapchain,
+    /// Opaque handle to Vulkan swapchain
     handle: vk::SwapchainKHR,
+    /// [LogicalDevice] the swapchain belongs to
     device: Rc<LogicalDevice>,
 }
 
 impl Swapchain {
+    /// Creates a new [SwapchainBuilder]
     pub fn builder() -> SwapchainBuilder {
         SwapchainBuilder::new()
     }
 }
 
 impl Swapchain {
+    /// Returns the extent (width, height) of the swapchain
     pub fn extent(&self) -> (u32, u32) {
         (self.extent.width, self.extent.height)
     }
 
+    /// Returns the main render pass of the swapchain.
+    ///
+    /// The render pass consists of a color and depth stencil attachment
     pub fn render_pass(&self) -> vk::RenderPass {
         self.render_pass
     }
 
+    /// Returns all the framebuffers in the [Swapchain]
     pub fn framebuffers(&self) -> &[vk::Framebuffer] {
         &self.framebuffers
     }
 
+    /// Returns the index of the current framebuffer being drawn to
     pub fn current_frame(&self) -> usize {
         self.current_frame
     }
 }
 
 impl Swapchain {
+    /// Returns the index of the next image that is ready to be drawn to.
+    ///
+    /// May return [SwapchainError::Suboptimal] in which the [Swapchain] no longer perfectly
+    /// matches the [Surface] and should be recreated.
     pub fn acquire_next_image(&self) -> Result<usize, SwapchainError> {
         self.device.wait_for_fences(
             &[&self.in_flight_fences[self.current_frame]],
@@ -570,6 +634,10 @@ impl Swapchain {
         }
     }
 
+    /// Submits a command buffer to the present queue using the framebuffer and images at `index`.
+    ///
+    /// FIXME: Safety is not garuanteed, checkthe command buffer belongs to a graphics queue so
+    /// that it can be submitted
     pub fn submit_command_buffer(
         &mut self,
         command_buffer: &CommandBuffer,
