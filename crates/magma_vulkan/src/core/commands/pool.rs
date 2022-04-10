@@ -7,19 +7,28 @@ use crate::{
     VulkanError,
 };
 
+/// Errors that can be returned by the [CommandPool]
 #[derive(thiserror::Error, Debug)]
 pub enum CommandPoolError {
     #[error(transparent)]
     DeviceError(#[from] VulkanError),
 }
 
+/// Wraps a Vulkan command pool
 pub struct CommandPool {
+    /// [CommandBuffers][CommandBuffer] that are allocated to this [CommandPool]
     buffers: Vec<CommandBuffer>,
+    /// Opaque handle to Vulkan command pool
     handle: vk::CommandPool,
+    /// [LogicalDevice] this command pool belongs to
     device: Rc<LogicalDevice>,
 }
 
 impl CommandPool {
+    /// Creates a new [CommandPool].
+    ///
+    /// Any [CommandBuffers][CommandBuffer] allocated from this [CommandPool] can only be submitted
+    /// to queues in `queue_family`.
     pub fn new(
         device: Rc<LogicalDevice>,
         queue_family: &QueueFamily,
@@ -47,16 +56,20 @@ impl CommandPool {
 }
 
 impl CommandPool {
+    /// Returns [CommandBuffers][CommandBuffer] that have been allocated from this [CommandPool]
     pub fn buffers(&self) -> &[CommandBuffer] {
         &self.buffers
     }
 
+    /// Returns a mutable list of [CommandBuffers][CommandBuffer] that have been allocated from
+    /// this [CommandPool].
     pub fn buffers_mut(&mut self) -> &mut [CommandBuffer] {
         &mut self.buffers
     }
 }
 
 impl CommandPool {
+    /// Allocates `count` number of [CommandBuffers][CommandBuffer] with a level of `level`
     pub fn allocate_buffers(
         &mut self,
         count: u32,
@@ -82,6 +95,8 @@ impl CommandPool {
         Ok(())
     }
 
+    /// Frees all the [CommandBuffers][CommandBuffer] that are currently allocated to this
+    /// [CommandPool].
     pub fn free_buffers(&mut self) {
         let buffers: Vec<vk::CommandBuffer> = self
             .buffers
