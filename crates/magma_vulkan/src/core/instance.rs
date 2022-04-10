@@ -61,14 +61,18 @@ impl Instance {
             .engine_name(&engine_name);
 
         let enabled_extension_names = Instance::required_extension_names();
-        let enabled_layer_names = if ENABLE_VALIDATION_LAYERS {
+        let enabled_layer_names_raw: Vec<CString> = if ENABLE_VALIDATION_LAYERS {
             VALIDATION_LAYERS
                 .iter()
-                .map(|layer| layer.as_ptr() as *const i8)
-                .collect::<Vec<*const i8>>()
+                .map(|layer| CString::new(*layer).unwrap())
+                .collect()
         } else {
             Vec::new()
         };
+        let enabled_layer_names: Vec<*const i8> = enabled_layer_names_raw
+            .iter()
+            .map(|layer| layer.as_ptr())
+            .collect();
 
         let create_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)

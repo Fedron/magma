@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     // a winit window and event loop
     let mut event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title("Resizing")
+        .with_title("Triangle")
         .build(&event_loop)?;
 
     // Create an instance that will allow us to interface with Vulkan

@@ -68,7 +68,6 @@ impl Debugger {
         let supported_layers = entry
             .enumerate_instance_layer_properties()
             .map_err(|err| DebuggerError::Other(err.into()))?;
-        println!("{:#?}", supported_layers);
 
         let is_missing_layers = crate::utils::contains_required(
             &supported_layers
