@@ -127,6 +127,7 @@ impl From<VkResult> for VulkanError {
 }
 
 pub mod prelude {
+    pub use crate::core::debugger::DebugLayer;
     pub use crate::core::commands::buffer::{CommandBuffer, CommandBufferLevel};
     pub use crate::core::commands::pool::{CommandPool, CommandPoolError};
     pub use crate::core::device::{

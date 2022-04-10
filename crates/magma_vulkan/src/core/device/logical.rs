@@ -4,7 +4,6 @@ use ash::vk;
 use super::{PhysicalDevice, Queue};
 use crate::{
     core::{
-        debugger::{ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
         device::QueueHandle,
         instance::Instance,
     },
@@ -64,14 +63,8 @@ impl LogicalDevice {
             );
         }
 
-        let required_validation_layers: Vec<*const i8> = if ENABLE_VALIDATION_LAYERS {
-            VALIDATION_LAYERS
-                .iter()
-                .map(|layer| layer.as_ptr() as *const i8)
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let required_validation_layers_raw: Vec<CString> = instance.debug_layers().iter().map(|&layer| Into::<CString>::into(layer)).collect();
+        let required_validation_layers: Vec<*const i8> = required_validation_layers_raw.iter().map(|layer| layer.as_ptr()).collect();
 
         let device_extensions: Vec<CString> = physical_device
             .enabled_extensions()

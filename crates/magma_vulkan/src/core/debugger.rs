@@ -1,16 +1,8 @@
-use std::ffi::{c_void, CStr};
 use ash::{extensions::ext::DebugUtils, vk};
+use std::ffi::CString;
+use std::ffi::{c_void, CStr};
 
 use crate::VulkanError;
-
-/// Whether validation layers should be enabled
-///
-/// Set automatically at compile time depending no whether or not debug assertions are enabled
-pub const ENABLE_VALIDATION_LAYERS: bool = cfg!(debug_assertions);
-/// List of validation layers we want to enabled
-///
-/// TODO: Let the user pass in a list of validation layers to enable
-pub const VALIDATION_LAYERS: [&'static str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 /// Errors that can be throw by the debugger
 #[derive(thiserror::Error, Debug)]
@@ -23,6 +15,33 @@ pub enum DebuggerError {
     Other(VulkanError),
 }
 
+/// Vulkan/LunarG validation layers that can be enabled for debugging
+#[derive(Clone, Copy)]
+pub enum DebugLayer {
+    /// The main Khronos validation layer
+    KhronosValidation,
+    /// Prints API calls, parameters, and values
+    ApiDump,
+}
+
+impl Into<CString> for DebugLayer {
+    fn into(self) -> CString {
+        match self {
+            DebugLayer::KhronosValidation => CString::new("VK_LAYER_KHRONOS_validation").unwrap(),
+            DebugLayer::ApiDump => CString::new("VK_LAYER_LUNARG_api_dump").unwrap(),
+        }
+    }
+}
+
+impl Into<String> for DebugLayer {
+    fn into(self) -> String {
+        match self {
+            DebugLayer::KhronosValidation => String::from("VK_LAYER_KHRONOS_validation"),
+            DebugLayer::ApiDump => String::from("VK_LAYER_LUNARG_api_dump"),
+        }
+    }
+}
+
 /// Wraps Vulkan debug utils
 pub struct Debugger {
     /// Vulkan debug utils extension used to create the messenger
@@ -33,8 +52,12 @@ pub struct Debugger {
 
 impl Debugger {
     /// Creates a new Vulkan debug messenger that logs performance and validation messages
-    pub fn new(entry: &ash::Entry, instance: &ash::Instance) -> Result<Debugger, DebuggerError> {
-        Debugger::check_validation_layers(entry)?;
+    pub fn new(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        layers: &[DebugLayer],
+    ) -> Result<Debugger, DebuggerError> {
+        Debugger::check_validation_layers(entry, layers)?;
 
         let debug_utils = DebugUtils::new(entry, instance);
         let create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
@@ -64,7 +87,10 @@ impl Debugger {
 
 impl Debugger {
     /// Checks wether the loaded Vulkan library supports the required validation layers
-    pub fn check_validation_layers(entry: &ash::Entry) -> Result<(), DebuggerError> {
+    pub fn check_validation_layers(
+        entry: &ash::Entry,
+        required_layers: &[DebugLayer],
+    ) -> Result<(), DebuggerError> {
         let supported_layers = entry
             .enumerate_instance_layer_properties()
             .map_err(|err| DebuggerError::Other(err.into()))?;
@@ -74,9 +100,9 @@ impl Debugger {
                 .iter()
                 .map(|layer| crate::utils::char_array_to_string(&layer.layer_name))
                 .collect::<Vec<String>>(),
-            &VALIDATION_LAYERS
+            &required_layers
                 .iter()
-                .map(|&layer| layer.to_string())
+                .map(|&layer| Into::<String>::into(layer))
                 .collect::<Vec<String>>(),
         );
 

@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         .build(&event_loop)?;
 
     // Create an instance that will allow us to interface with Vulkan
-    let instance = Instance::new()?;
+    let instance = Instance::new(&[DebugLayer::KhronosValidation])?;
     // Finds a physical device that is capable of drawing to the screen
     // We require the swapchain extension and a graphics queue if we want to draw to a surface
     let physical_device = PhysicalDevice::builder()

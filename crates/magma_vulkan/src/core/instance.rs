@@ -9,9 +9,8 @@ use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
 use ash::vk;
 
-use super::debugger::{Debugger, DebuggerError};
+use super::debugger::{DebugLayer, Debugger, DebuggerError};
 use crate::{
-    core::debugger::{ENABLE_VALIDATION_LAYERS, VALIDATION_LAYERS},
     utils, VulkanError,
 };
 
@@ -32,6 +31,8 @@ pub enum InstanceError {
 
 /// Wraps a Vulkan instance and loaded library
 pub struct Instance {
+    /// List of Vulkan validation layers used by the [Debugger]
+    debug_layers: Vec<DebugLayer>,
     /// Handle to the created debugger
     debugger: ManuallyDrop<Option<Debugger>>,
     /// Opaque handle to Vulkan instance
@@ -44,13 +45,13 @@ impl Instance {
     /// Creates a new instance that loads the Vulkan library
     ///
     /// Automatically creates a [Debugger] if `magma` is being built in debug mode
-    pub fn new() -> Result<Instance, InstanceError> {
+    pub fn new(debug_layers: &[DebugLayer]) -> Result<Instance, InstanceError> {
         let entry =
             unsafe { ash::Entry::load().map_err(|err| InstanceError::LoadLibraryError(err))? };
 
         Instance::check_required_extensions(&entry)?;
-        if ENABLE_VALIDATION_LAYERS {
-            Debugger::check_validation_layers(&entry)?;
+        if !debug_layers.is_empty() {
+            Debugger::check_validation_layers(&entry, debug_layers)?;
         }
 
         use std::ffi::CString;
@@ -61,14 +62,10 @@ impl Instance {
             .engine_name(&engine_name);
 
         let enabled_extension_names = Instance::required_extension_names();
-        let enabled_layer_names_raw: Vec<CString> = if ENABLE_VALIDATION_LAYERS {
-            VALIDATION_LAYERS
-                .iter()
-                .map(|layer| CString::new(*layer).unwrap())
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let enabled_layer_names_raw: Vec<CString> = debug_layers
+            .iter()
+            .map(|&layer| Into::<CString>::into(layer))
+            .collect();
         let enabled_layer_names: Vec<*const i8> = enabled_layer_names_raw
             .iter()
             .map(|layer| layer.as_ptr())
@@ -85,14 +82,15 @@ impl Instance {
                 .map_err(|err| InstanceError::CantCreate(err.into()))?
         };
 
-        let debugger: Option<Debugger> = if ENABLE_VALIDATION_LAYERS {
+        let debugger: Option<Debugger> = if !debug_layers.is_empty() {
             log::debug!("Created Vulkan debugger");
-            Some(Debugger::new(&entry, &handle)?)
+            Some(Debugger::new(&entry, &handle, debug_layers)?)
         } else {
             None
         };
 
         Ok(Instance {
+            debug_layers: debug_layers.to_vec(),
             debugger: ManuallyDrop::new(debugger),
             entry,
             handle,
@@ -159,6 +157,11 @@ impl Instance {
     /// Returns the handle to the Vulkan instance
     pub(crate) fn vk_handle(&self) -> &ash::Instance {
         &self.handle
+    }
+
+    /// Returns a list of the debug layers used by the debugger
+    pub fn debug_layers(&self) -> &[DebugLayer] {
+        &self.debug_layers
     }
 }
 
