@@ -1,11 +1,9 @@
 extern crate spirv_reflect;
 
 use ash::vk;
-use spirv_reflect::{types::ReflectShaderStageFlags, *};
-use std::{
-    fmt::{Debug, Display},
-    rc::Rc,
-};
+use bitflags::bitflags;
+use spirv_reflect::ShaderModule as SpirvShader;
+use std::{fmt::Debug, rc::Rc};
 
 use crate::{core::device::LogicalDevice, VulkanError};
 
@@ -24,78 +22,80 @@ pub enum ShaderError {
     BuildFail(VulkanError),
 }
 
-/// Supported shader stages
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ShaderStage {
-    Vertex,
-    Fragment,
-    Compute,
-}
-
-impl Display for ShaderStage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ShaderStage::Vertex => write!(f, "Vertex"),
-            ShaderStage::Fragment => write!(f, "Fragment"),
-            ShaderStage::Compute => write!(f, "Compute"),
-        }
+bitflags! {
+    pub struct ShaderStageFlags: u32 {
+        const VERTEX = 0b1;
+        const FRAGMENT = 0b10000;
+        const COMPUTE = 0b100000;
+        const ALL_GRAPHICS = 0b11111;
     }
 }
 
-impl Into<vk::ShaderStageFlags> for ShaderStage {
+impl Into<vk::ShaderStageFlags> for ShaderStageFlags {
     fn into(self) -> vk::ShaderStageFlags {
-        match self {
-            ShaderStage::Vertex => vk::ShaderStageFlags::VERTEX,
-            ShaderStage::Fragment => vk::ShaderStageFlags::FRAGMENT,
-            ShaderStage::Compute => vk::ShaderStageFlags::COMPUTE,
-        }
+        vk::ShaderStageFlags::from_raw(self.bits())
     }
 }
 
-/// Helps to build a shader and validate its correctness
-pub struct ShaderBuilder {
-    /// File path to the shader GLSL code
-    file_path: &'static str,
+pub struct Shader {
+    pub file_path: &'static str,
+    pub flags: ShaderStageFlags,
+    pub entry_point: String,
+
+    code: Vec<u32>,
+    reflect: SpirvShader,
 }
 
-impl ShaderBuilder {
-    /// Creates a new [ShaderBuilder] with the `file_path`
-    pub fn new(file_path: &'static str) -> ShaderBuilder {
-        ShaderBuilder { file_path }
-    }
-
-    /// Creates a [Shader] and validates that it is correct
-    ///
-    /// # Validation
-    /// TODO
-    pub fn build(self, device: Rc<LogicalDevice>) -> Result<Shader, ShaderError> {
+impl Shader {
+    pub fn new(
+        file_path: &'static str,
+        stage_flags: ShaderStageFlags,
+    ) -> Result<Shader, ShaderError> {
         use std::fs::File;
         use std::path::Path;
 
-        let mut path = Path::new(self.file_path).to_path_buf();
+        let mut path = Path::new(file_path).to_path_buf();
         path.set_extension(format!(
             "{}.spv",
             path.extension().unwrap().to_str().unwrap()
         ));
-        let shader_code =
+
+        let code =
             ash::util::read_spv(&mut File::open(path).map_err(|_| ShaderError::FileNotFound)?)
                 .map_err(|_| ShaderError::CantRead)?;
-
-        let shader_module = ShaderModule::load_u32_data(&shader_code)
+        let reflect = SpirvShader::load_u32_data(&code)
             .map_err(|err| ShaderError::CantParseSpv(err.to_string()))?;
 
-        let shader_stage = shader_module.get_shader_stage();
-        let shader_stage = if shader_stage.contains(ReflectShaderStageFlags::VERTEX) {
-            ShaderStage::Vertex
-        } else if shader_stage.contains(ReflectShaderStageFlags::FRAGMENT) {
-            ShaderStage::Fragment
-        } else if shader_stage.contains(ReflectShaderStageFlags::COMPUTE) {
-            ShaderStage::Compute
-        } else {
-            return Err(ShaderError::UnsupportedShaderStage);
-        };
+        let entry_point = reflect.get_entry_point_name();
 
-        let create_info = vk::ShaderModuleCreateInfo::builder().code(&shader_code);
+        Ok(Shader {
+            file_path,
+            flags: stage_flags,
+            entry_point,
+
+            code,
+            reflect,
+        })
+    }
+}
+
+/// Wraps a Vulkan shader module
+#[derive(Clone)]
+pub struct ShaderModule {
+    /// Entry point into the shader code
+    entry_point: String,
+    /// Shader stages the module belongs to
+    stage_flags: ShaderStageFlags,
+
+    /// Opaque handle to the Vulkan shader module
+    handle: vk::ShaderModule,
+    /// Logical device the shader belongs to
+    device: Rc<LogicalDevice>,
+}
+
+impl ShaderModule {
+    pub fn new(shader: &Shader, device: Rc<LogicalDevice>) -> Result<ShaderModule, ShaderError> {
+        let create_info = vk::ShaderModuleCreateInfo::builder().code(&shader.code);
         let handle = unsafe {
             device
                 .vk_handle()
@@ -103,69 +103,39 @@ impl ShaderBuilder {
                 .map_err(|err| ShaderError::BuildFail(err.into()))?
         };
 
-        Ok(Shader {
-            entry_point: shader_module.get_entry_point_name(),
-            stage: shader_stage,
-            module: handle,
+        Ok(ShaderModule {
+            entry_point: shader.entry_point.clone(),
+            stage_flags: shader.flags,
+
+            handle,
             device,
         })
     }
 }
 
-/// Wraps a Vulkan shader module
-#[derive(Clone)]
-pub struct Shader {
-    /// Entry point into the shader code
-    entry_point: String,
-    /// Shader stage
-    stage: ShaderStage,
-
-    /// Opaque handle to the Vulkan shader module
-    module: vk::ShaderModule,
-    /// Logical device the shader belongs to
-    device: Rc<LogicalDevice>,
-}
-
-impl Shader {
-    /// Creates a new [ShaderBuilder] with a `file_path` set
-    pub fn builder(file_path: &'static str) -> ShaderBuilder {
-        ShaderBuilder::new(file_path)
-    }
-}
-
-impl Shader {
-    /// Returns the entry point into the shader code
-    pub fn entry_point(&self) -> &String {
-        &self.entry_point
-    }
-
-    /// Returns the shader stage
-    pub fn stage(&self) -> &ShaderStage {
-        &self.stage
-    }
-
+impl ShaderModule {
     /// Returns the handle to the Vulkan shader module
-    pub(crate) fn vk_module(&self) -> vk::ShaderModule {
-        self.module
+    pub(crate) fn vk_handle(&self) -> vk::ShaderModule {
+        self.handle
     }
 }
 
-impl Debug for Shader {
+impl Debug for ShaderModule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Shader")
             .field("entry_point", &self.entry_point)
-            .field("stage", &self.stage)
-            .field("handle", &self.module)
+            .field("stage", &self.stage_flags)
+            .field("handle", &self.handle)
             .finish()
     }
 }
 
-impl Drop for Shader {
+impl Drop for ShaderModule {
     fn drop(&mut self) {
         unsafe {
             self.device
                 .vk_handle()
-                .destroy_shader_module(self.module, None);
+                .destroy_shader_module(self.handle, None);
         };
     }
 }

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use self::{
     config::PipelineConfigInfo,
-    shader::{Shader, ShaderStage},
+    shader::{ShaderModule, ShaderError, Shader},
 };
 use crate::{core::device::LogicalDevice, VulkanError};
 
@@ -17,14 +17,14 @@ pub mod shader;
 pub enum PipelineError {
     #[error("Can't create a pipeline with no shaders")]
     NoShaders,
-    #[error("Missing shader stage {0} to complete pipeline")]
-    MissingShaderStage(ShaderStage),
     #[error("Failed to create pipeline layout: {0}")]
     CantCreateLayout(VulkanError),
     #[error("No render pass was set for the pipeline")]
     MissingRenderPass,
     #[error("Failed to create Vulkan pipeline: {0}")]
     CantCreatePipeline(VulkanError),
+    #[error("Building a shader failed: {0}")]
+    ShaderError(#[from] ShaderError)
 }
 
 /// Allows you to create a graphics pipeline
@@ -45,7 +45,7 @@ impl PipelineBuilder {
     }
 
     /// Adds a [Shader] to the [PipelineBuilder]
-    pub fn add_shader(mut self, shader: Shader) -> PipelineBuilder {
+    pub fn attach_shader(mut self, shader: Shader) -> PipelineBuilder {
         self.shaders.push(shader);
         self
     }
@@ -73,31 +73,24 @@ impl PipelineBuilder {
     pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline, PipelineError> {
         use std::ffi::CStr;
 
-        if self
-            .shaders
-            .iter()
-            .any(|shader| *shader.stage() == ShaderStage::Fragment)
-            && !self
-                .shaders
-                .iter()
-                .any(|shader| *shader.stage() == ShaderStage::Vertex)
-        {
-            return Err(PipelineError::MissingShaderStage(ShaderStage::Vertex));
-        }
-
         if self.render_pass.is_none() {
             return Err(PipelineError::MissingRenderPass);
         }
 
+        let mut shader_modules: Vec<ShaderModule> = Vec::new();
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = Vec::new();
         for shader in self.shaders.iter() {
+            let shader_module = ShaderModule::new(&shader, device.clone())?;
+
             shader_stages.push(
                 vk::PipelineShaderStageCreateInfo::builder()
-                    .module(shader.vk_module())
+                    .module(shader_module.vk_handle())
+                    // TODO: use entry point defined in shader_module
                     .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") })
-                    .stage(Into::<vk::ShaderStageFlags>::into(*shader.stage()))
+                    .stage(shader.flags.into())
                     .build(),
             );
+            shader_modules.push(shader_module);
         }
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
@@ -141,6 +134,7 @@ impl PipelineBuilder {
         };
 
         Ok(Pipeline {
+            _shader_modules: shader_modules,
             layout,
             handle,
             device,
@@ -150,6 +144,8 @@ impl PipelineBuilder {
 
 /// Represents a Graphics pipeline that can be used to draw to a surface
 pub struct Pipeline {
+    /// List of the shader modules being used by the [Pipeline]
+    _shader_modules: Vec<ShaderModule>,
     /// Opaque handle to Vulkan layout used to create the pipeline
     layout: vk::PipelineLayout,
     /// Opaque handle to Vulkan Pipeline

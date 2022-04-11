@@ -55,14 +55,12 @@ fn main() -> Result<()> {
         .build(logical_device.clone(), &surface)?;
 
     // We can finally create the graphics pipeline with our shaders
-    let vertex_shader =
-        ShaderBuilder::new("shaders/triangle.vert").build(logical_device.clone())?;
-    let fragment_shader =
-        ShaderBuilder::new("shaders/triangle.frag").build(logical_device.clone())?;
+    let vertex_shader = Shader::new("shaders/triangle.vert", ShaderStageFlags::VERTEX)?;
+    let fragment_shader = Shader::new("shaders/triangle.frag", ShaderStageFlags::FRAGMENT)?;
 
     let pipeline = Pipeline::builder()
-        .add_shader(vertex_shader)
-        .add_shader(fragment_shader)
+        .attach_shader(vertex_shader)
+        .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())
         .build(logical_device.clone())?;
 

@@ -138,7 +138,7 @@ pub mod prelude {
     pub use crate::core::surface::{Surface, SurfaceError};
     pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 
-    pub use crate::pipeline::shader::{ShaderBuilder, ShaderError, ShaderStage};
+    pub use crate::pipeline::shader::{Shader, ShaderError, ShaderStageFlags};
     pub use crate::pipeline::{Pipeline, PipelineBuilder, PipelineError};
 
     pub use crate::sync::{Fence, Semaphore};
