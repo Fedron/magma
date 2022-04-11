@@ -1,16 +1,18 @@
 //! This module wraps the creation of a graphics pipeline and its associated resources
 
 use ash::vk;
+use shader::ShaderStageFlags;
 use std::rc::Rc;
 
 use self::{
     config::PipelineConfigInfo,
-    shader::{ShaderModule, ShaderError, Shader},
+    shader::{Shader, ShaderError, ShaderModule},
 };
 use crate::{core::device::LogicalDevice, VulkanError};
 
 pub mod config;
 pub mod shader;
+pub mod vertex;
 
 /// Errors that can be thrown by the pipeline
 #[derive(thiserror::Error, Debug)]
@@ -23,8 +25,10 @@ pub enum PipelineError {
     MissingRenderPass,
     #[error("Failed to create Vulkan pipeline: {0}")]
     CantCreatePipeline(VulkanError),
+    #[error("Missing shader with shader stage: {0}")]
+    MissingShader(&'static str),
     #[error("Building a shader failed: {0}")]
-    ShaderError(#[from] ShaderError)
+    ShaderError(#[from] ShaderError),
 }
 
 /// Allows you to create a graphics pipeline
@@ -80,7 +84,7 @@ impl PipelineBuilder {
         let mut shader_modules: Vec<ShaderModule> = Vec::new();
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = Vec::new();
         for shader in self.shaders.iter() {
-            let shader_module = ShaderModule::new(&shader, device.clone())?;
+            let shader_module = shader.build(device.clone())?;
 
             shader_stages.push(
                 vk::PipelineShaderStageCreateInfo::builder()
@@ -93,9 +97,41 @@ impl PipelineBuilder {
             shader_modules.push(shader_module);
         }
 
+        let vertex_shader = self
+            .shaders
+            .iter()
+            .find(|&shader| shader.flags.contains(ShaderStageFlags::VERTEX));
+        let (vertex_attribute_descriptions, vertex_binding_descriptions) = if vertex_shader
+            .is_none()
+        {
+            return Err(PipelineError::MissingShader("Vertex"));
+        } else {
+            let shader = vertex_shader.unwrap();
+            if !shader.should_define_vertex {
+                (Vec::new(), Vec::new())
+            } else {
+                let vertex_attribute_descriptions: Vec<vk::VertexInputAttributeDescription> =
+                    shader
+                        .vertex_attribute_descriptions
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .map(|&description| description.into())
+                        .collect();
+                let vertex_binding_descriptions: Vec<vk::VertexInputBindingDescription> = shader
+                    .vertex_binding_descriptions
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|&description| description.into())
+                    .collect();
+
+                (vertex_attribute_descriptions, vertex_binding_descriptions)
+            }
+        };
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_attribute_descriptions(&[])
-            .vertex_binding_descriptions(&[]);
+            .vertex_attribute_descriptions(&vertex_attribute_descriptions)
+            .vertex_binding_descriptions(&vertex_binding_descriptions);
 
         let layout_create_info = vk::PipelineLayoutCreateInfo::builder()
             .push_constant_ranges(&[])
