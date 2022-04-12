@@ -259,3 +259,14 @@ impl<T> Buffer<T> {
         Ok(())
     }
 }
+
+impl<T> Drop for Buffer<T> {
+    fn drop(&mut self) {
+        self.unmap();
+        unsafe {
+            self.device.vk_handle().destroy_buffer(self.handle, None);
+            self.device.vk_handle().free_memory(self.memory, None);
+        };
+    }
+}
+
