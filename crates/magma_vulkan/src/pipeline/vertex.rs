@@ -17,7 +17,7 @@ impl Into<vk::VertexInputRate> for VertexInputRate {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VertexAttributeDescription {
     pub location: u32,
     pub binding: u32,
@@ -57,4 +57,3 @@ pub trait Vertex {
     fn get_attribute_descriptions() -> Vec<VertexAttributeDescription>;
     fn get_binding_descriptions() -> Vec<VertexBindingDescription>;
 }
-

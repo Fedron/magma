@@ -2,7 +2,7 @@ extern crate spirv_reflect;
 
 use ash::vk;
 use bitflags::bitflags;
-use spirv_reflect::ShaderModule as SpirvShader;
+use spirv_reflect::{types::ReflectFormat, ShaderModule as SpirvShader};
 use std::{fmt::Debug, rc::Rc};
 
 use crate::{core::device::LogicalDevice, VulkanError};
@@ -23,7 +23,7 @@ pub enum ShaderError {
     #[error("Failed to create a Vulkan shader module {0}")]
     BuildFail(VulkanError),
     #[error("Invalid shader definition: {0}")]
-    InvalidDefinition(&'static str),
+    InvalidDefinition(String),
 }
 
 bitflags! {
@@ -72,13 +72,19 @@ impl Shader {
             .map_err(|err| ShaderError::CantParseSpv(err.to_string()))?;
 
         let entry_point = reflect.get_entry_point_name();
-        let shader_stage = ShaderStageFlags::from_bits(reflect.get_shader_stage().bits())
-            .ok_or(ShaderError::InvalidDefinition("Invalid shader stage"))?;
+        let shader_stage = ShaderStageFlags::from_bits(reflect.get_shader_stage().bits()).ok_or(
+            ShaderError::InvalidDefinition("Invalid shader stage".to_string()),
+        )?;
 
         let mut should_define_vertex = false;
         if shader_stage.contains(ShaderStageFlags::VERTEX) {
-            let input_variables = reflect.enumerate_input_variables(Some(&entry_point)).map_err(|err| ShaderError::CantParseSpv(err.to_string()))?;
-            if input_variables.iter().any(|var| !var.decoration_flags.contains(spirv_reflect::types::variable::ReflectDecorationFlags::BUILT_IN)) {
+            let input_variables = reflect
+                .enumerate_input_variables(Some(&entry_point))
+                .map_err(|err| ShaderError::CantParseSpv(err.to_string()))?;
+            if input_variables.iter().any(|var| {
+                !var.decoration_flags
+                    .contains(spirv_reflect::types::variable::ReflectDecorationFlags::BUILT_IN)
+            }) {
                 should_define_vertex = true;
             }
         }
@@ -98,8 +104,71 @@ impl Shader {
     }
 
     pub fn build(&self, device: Rc<LogicalDevice>) -> Result<ShaderModule, ShaderError> {
-        if self.should_define_vertex && (self.vertex_attribute_descriptions.is_none() || self.vertex_binding_descriptions.is_none()) {
-            return Err(ShaderError::InvalidDefinition("The spirv defines vertex attributes, but you haven't linked any, use .with_vertex<V>() to link vertex attributes"));
+        if self.should_define_vertex
+            && (self.vertex_attribute_descriptions.is_none()
+                || self.vertex_binding_descriptions.is_none())
+        {
+            return Err(ShaderError::InvalidDefinition("The spirv defines vertex attributes, but you haven't linked any, use .with_vertex<V>() to link vertex attributes".to_string()));
+        } else if self.should_define_vertex {
+            let input_variables = self
+                .reflect
+                .enumerate_input_variables(Some(&self.entry_point))
+                .map_err(|err| ShaderError::CantParseSpv(err.into()))?;
+            let mut vertex_attribute_descriptions: Vec<VertexAttributeDescription> = Vec::new();
+            let mut offset = 0;
+            for input_variable in input_variables.iter() {
+                if input_variable.storage_class == spirv_reflect::types::ReflectStorageClass::Input
+                    && input_variable.decoration_flags.is_empty()
+                {
+                    let format = match input_variable.format {
+                        ReflectFormat::R32_SINT => vk::Format::R32_SINT,
+                        ReflectFormat::R32G32_SINT => vk::Format::R32G32_SINT,
+                        ReflectFormat::R32G32B32_SINT => vk::Format::R32G32B32_SINT,
+                        ReflectFormat::R32G32B32A32_SINT => vk::Format::R32G32B32A32_SINT,
+                        ReflectFormat::R32_SFLOAT => vk::Format::R32_SFLOAT,
+                        ReflectFormat::R32G32_SFLOAT => vk::Format::R32G32_SFLOAT,
+                        ReflectFormat::R32G32B32_SFLOAT => vk::Format::R32G32B32_SFLOAT,
+                        ReflectFormat::R32G32B32A32_SFLOAT => vk::Format::R32G32B32A32_SFLOAT,
+                        _ => {
+                            return Err(ShaderError::InvalidDefinition(format!(
+                                "Input variable `{}` has an unsupported type `{:#?}`",
+                                input_variable.name, input_variable.format
+                            )))
+                        }
+                    };
+
+                    vertex_attribute_descriptions.push(VertexAttributeDescription {
+                        location: input_variable.location,
+                        binding: 0,
+                        format,
+                        offset,
+                    });
+
+                    offset += input_variable.numeric.vector.component_count * 4;
+                }
+            }
+
+            for vertex_attribute in vertex_attribute_descriptions.iter() {
+                if let Some(user_vertex_attribute) = self
+                    .vertex_attribute_descriptions
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .find(|attr| attr.location == vertex_attribute.location)
+                {
+                    if vertex_attribute.ne(user_vertex_attribute) {
+                        return Err(
+                            ShaderError::InvalidDefinition(
+                                format!("Shader input variable at location {} does not match the variable in the struct you provided with `.with_vertex::<V>()` at the same location", vertex_attribute.location)
+                        ));
+                    }
+                } else {
+                    return Err(
+                        ShaderError::InvalidDefinition(
+                            format!("Shader contains input variable with definition: {:#?}\nbut the struct you provided with `.with_vertex::<V>()` doesn't contain a matching variable", vertex_attribute)
+                    ));
+                }
+            }
         }
 
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&self.code);
