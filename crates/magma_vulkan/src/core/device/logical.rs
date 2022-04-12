@@ -7,6 +7,7 @@ use crate::{
         device::QueueHandle,
         instance::Instance,
     },
+    buffer::MemoryPropertyFlags,
     sync::Fence,
     VulkanError,
 };
@@ -186,7 +187,7 @@ impl LogicalDevice {
     pub fn create_image(
         &self,
         create_info: &vk::ImageCreateInfo,
-        memory_properties: vk::MemoryPropertyFlags,
+        memory_properties: MemoryPropertyFlags,
     ) -> Result<(vk::Image, vk::DeviceMemory), LogicalDeviceError> {
         let image = unsafe {
             self.handle
@@ -221,7 +222,7 @@ impl LogicalDevice {
     pub fn find_memory_type(
         &self,
         type_filter: u32,
-        required_properties: vk::MemoryPropertyFlags,
+        required_properties: MemoryPropertyFlags,
     ) -> Result<u32, LogicalDeviceError> {
         for (i, memory_type) in self
             .physical_device
@@ -231,7 +232,7 @@ impl LogicalDevice {
             .enumerate()
         {
             if (type_filter & (1 << i)) > 0
-                && memory_type.property_flags.contains(required_properties)
+                && memory_type.property_flags.contains(required_properties.into())
             {
                 return Ok(i as u32);
             }

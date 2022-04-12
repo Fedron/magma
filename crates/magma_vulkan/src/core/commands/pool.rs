@@ -56,6 +56,11 @@ impl CommandPool {
 }
 
 impl CommandPool {
+    /// Return Vulkan handle to Vulkan command pool
+    pub(crate) fn vk_handle(&self) -> vk::CommandPool {
+        self.handle
+    }
+
     /// Returns [CommandBuffers][CommandBuffer] that have been allocated from this [CommandPool]
     pub fn buffers(&self) -> &[CommandBuffer] {
         &self.buffers

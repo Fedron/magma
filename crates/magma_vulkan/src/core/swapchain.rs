@@ -7,6 +7,7 @@ use crate::{
         device::{DeviceExtension, LogicalDevice, LogicalDeviceError, Queue},
         surface::Surface,
     },
+    buffer::MemoryPropertyFlags,
     sync::{Fence, Semaphore},
     VulkanError,
 };
@@ -471,7 +472,7 @@ impl SwapchainBuilder {
                 .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
             let (depth_image, depth_image_memory) =
-                device.create_image(&image_info, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
+                device.create_image(&image_info, MemoryPropertyFlags::DEVICE_LOCAL)?;
 
             let image_view_info = vk::ImageViewCreateInfo::builder()
                 .image(depth_image)
