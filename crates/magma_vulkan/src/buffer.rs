@@ -17,15 +17,15 @@ pub enum BufferError {
 
 bitflags! {
     pub struct BufferUsageFlags: u32 {
-        const TRANSFER_SRC = 0b1;
-        const TRANSFER_DST = 0b10;
-        const UNIFORM_TEXEL = 0b100;
-        const STORAGE_TEXEL = 0b1000;
-        const UNIFORM_BUFFER = 0b100000;
-        const STORAGE_BUFFER = 0b1000000;
-        const INDEX_BUFFER = 0b10000000;
-        const VERTEX_BUFFER = 0b100000000;
-        const INDIRECT_BUFFER = 0b1000000000;
+        const TRANSFER_SRC = 0x1;
+        const TRANSFER_DST = 0x2;
+        const UNIFORM_TEXEL = 0x4;
+        const STORAGE_TEXEL = 0x8;
+        const UNIFORM_BUFFER = 0x10;
+        const STORAGE_BUFFER = 0x20;
+        const INDEX_BUFFER = 0x40;
+        const VERTEX_BUFFER = 0x80;
+        const INDIRECT_BUFFER = 0x100;
     }
 }
 

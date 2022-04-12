@@ -51,6 +51,10 @@ fn main() -> Result<()> {
         .preferred_present_mode(PresentMode::Mailbox)
         .build(logical_device.clone(), &surface)?;
 
+    // We use `.with_vertex::<V>()` to tell the shader to use our rust struct to represent any in
+    // layouts we defined in the shader
+    //
+    // This will also tell the pipeline to be created with vertex inputs
     let vertex_shader = Shader::new("shaders/vertex.vert")?.with_vertex::<SimpleVertex>();
     let fragment_shader = Shader::new("shaders/vertex.frag")?;
 
@@ -71,6 +75,49 @@ fn main() -> Result<()> {
         swapchain.framebuffers().len() as u32,
         CommandBufferLevel::Primary,
     )?;
+
+    // We create a staging buffer that will allow us to move the vertex data from the host memory
+    // onto the GPU memory which is the fastet memory.
+    //
+    // We could also just store the vertices in a buffer that is both visible to the host and
+    // device but this can start to introduce performance penalties than if you used a device local
+    // buffer.
+    let mut staging_buffer = Buffer::<SimpleVertex>::new(
+        logical_device.clone(),
+        3,
+        BufferUsageFlags::TRANSFER_SRC,
+        MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
+        1
+    )?;
+    // Before we can write anything to the buffer we need to map it
+    staging_buffer.map(u64::MAX, 0)?;
+    // After we write, the buffer will automatically be un-mapped
+    staging_buffer.write(&[
+        SimpleVertex {
+            position: [0.0, -0.5],
+            color: [1.0, 0.0, 0.0],
+        },
+        SimpleVertex {
+            position: [-0.5, 0.5],
+            color: [0.0, 1.0, 0.0],
+        },
+        SimpleVertex {
+            position: [0.5, 0.5],
+            color: [0.0, 0.0, 1.0],
+        },
+    ]);
+
+    // We now create a vertex buffer that will only be stored on the GPU and not accesible by us
+    // the host, hence why we need the staging buffer to copy from on the device
+    let mut vertex_buffer = Buffer::<SimpleVertex>::new(
+        logical_device.clone(),
+        3,
+        BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
+        MemoryPropertyFlags::DEVICE_LOCAL,
+        1,
+    )?;
+    // Copy from will copy from a buffer using a command buffer on the devcie
+    vertex_buffer.copy_from(&staging_buffer, &command_pool)?;
 
     let mut should_close = false;
     let mut is_minimized = false;
@@ -121,6 +168,9 @@ fn main() -> Result<()> {
         command_buffer.set_scissor(extent.clone())?;
 
         command_buffer.bind_pipeline(&pipeline);
+        // Since our pipeline was created with vertex inputs it now expects a vertex buffer to be
+        // bound before we call `draw()`
+        command_buffer.bind_vertex_buffer(&vertex_buffer);
         command_buffer.draw(3, 1, 0, 0);
 
         command_buffer.end_render_pass();
