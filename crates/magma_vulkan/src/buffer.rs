@@ -163,6 +163,7 @@ impl<T> Buffer<T> {
         }
     }
 
+    // TODO: Check we are writing `instance_count` number of items from `data`
     pub fn write(&mut self, data: &[T]) {
         if let Some(mapped) = self.mapped {
             unsafe {

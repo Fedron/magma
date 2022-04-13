@@ -1,5 +1,4 @@
-//! Demonstrates how to draw to the screen using a user-defined vertex array
-//! See the triangle example for how setting up Vulkan and Magma works
+//! Demonstrates how to draw vertices using an index buffer
 
 use std::rc::Rc;
 
@@ -30,7 +29,7 @@ fn main() -> Result<()> {
 
     let mut event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title("Vertex")
+        .with_title("Index")
         .build(&event_loop)?;
 
     let instance = Instance::new(&[DebugLayer::KhronosValidation])?;
@@ -54,8 +53,6 @@ fn main() -> Result<()> {
     let vertex_shader = Shader::new("shaders/vertex.vert")?;
     let fragment_shader = Shader::new("shaders/vertex.frag")?;
 
-    // Since we are using a Vertex struct to define our vertices, we need the pipeline to use the
-    // same generic type
     let pipeline = Pipeline::<SimpleVertex>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
@@ -74,52 +71,64 @@ fn main() -> Result<()> {
         CommandBufferLevel::Primary,
     )?;
 
-    // We create a staging buffer that will allow us to move the vertex data from the host memory
-    // onto the GPU memory which is the fastet memory.
-    //
-    // We could also just store the vertices in a buffer that is both visible to the host and
-    // device but this can start to introduce performance penalties than if you used a device local
-    // buffer.
     let mut staging_buffer = Buffer::<SimpleVertex>::new(
         logical_device.clone(),
-        3,
+        4,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1
     )?;
-    // Before we can write anything to the buffer we need to map it
-    // By specifying the size as `u64::MAX` we tell Vulkan we want to map the whole buffer
     staging_buffer.map(u64::MAX, 0)?;
-    // After we write, the buffer will automatically be un-mapped
     staging_buffer.write(&[
         SimpleVertex {
-            position: [0.0, -0.5],
+            position: [-0.5, -0.5],
             color: [1.0, 0.0, 0.0],
         },
         SimpleVertex {
-            position: [-0.5, 0.5],
+            position: [0.5, -0.5],
             color: [0.0, 1.0, 0.0],
         },
         SimpleVertex {
             position: [0.5, 0.5],
             color: [0.0, 0.0, 1.0],
         },
+        SimpleVertex {
+            position: [-0.5, 0.5],
+            color: [1.0, 0.0, 1.0],
+        },
     ]);
 
-    // We now create a vertex buffer that will only be stored on the GPU and not accesible by us
-    // the host, hence why we need the staging buffer to copy from on the device
-    //
-    // Since we are going to use this buffer as a vertex buffer we need to mark it as such using
-    // the VERTEX_BUFFER buffer usage flag
     let mut vertex_buffer = Buffer::<SimpleVertex>::new(
         logical_device.clone(),
-        3,
+        4,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
     )?;
-    // Copy from will copy from a buffer using a command buffer on the devcie
     vertex_buffer.copy_from(&staging_buffer, &command_pool)?;
+
+    // In the same way that we upload our vertices to vertex buffer through a staging buffer we
+    // will upload our Indices
+    let mut staging_buffer = Buffer::<u32>::new(
+        logical_device.clone(),
+        6,
+        BufferUsageFlags::TRANSFER_SRC,
+        MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
+        1
+    )?;
+    staging_buffer.map(u64::MAX, 0)?;
+    staging_buffer.write(&[0, 3, 1, 1, 3, 2]);
+
+    // Since this buffer will be used as an index buffer we need to mark it as such using the
+    // INDEX_BUFFER buffer usage flag
+    let mut index_buffer = Buffer::<u32>::new(
+        logical_device.clone(),
+        6,
+        BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::INDEX_BUFFER,
+        MemoryPropertyFlags::DEVICE_LOCAL,
+        1,
+    )?;
+    index_buffer.copy_from(&staging_buffer, &command_pool)?;
 
     let mut should_close = false;
     let mut is_minimized = false;
@@ -170,10 +179,11 @@ fn main() -> Result<()> {
         command_buffer.set_scissor(extent.clone())?;
 
         command_buffer.bind_pipeline(&pipeline);
-        // Since our pipeline was created with vertex inputs it now expects a vertex buffer to be
-        // bound before we call `draw()`
         command_buffer.bind_vertex_buffer(&vertex_buffer);
-        command_buffer.draw(3, 1, 0, 0);
+        // Before we can draw using an index buffer we need to make sure we bind it
+        command_buffer.bind_index_buffer(&index_buffer);
+        // We then draw using the `draw_indexed` command instead
+        command_buffer.draw_indexed(6, 1, 0, 0, 0);
 
         command_buffer.end_render_pass();
         command_buffer.end()?;

@@ -58,6 +58,8 @@ fn main() -> Result<()> {
     let vertex_shader = Shader::new("shaders/triangle.vert")?;
     let fragment_shader = Shader::new("shaders/triangle.frag")?;
 
+    // A pipeline requires a Vertex generic, but in this case we aren't using a vertex buffer and
+    // so we can set the generic to be `EmptyVertex`
     let pipeline = Pipeline::<EmptyVertex>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)

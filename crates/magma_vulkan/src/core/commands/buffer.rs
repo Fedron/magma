@@ -1,7 +1,12 @@
 use ash::vk;
 use std::rc::Rc;
 
-use crate::{buffer::Buffer, core::device::LogicalDevice, pipeline::{Pipeline, vertex::Vertex}, VulkanError};
+use crate::{
+    buffer::Buffer,
+    core::device::LogicalDevice,
+    pipeline::{vertex::Vertex, Pipeline},
+    VulkanError,
+};
 
 /// Errors that can be thrown by the CommandBuffer
 #[derive(thiserror::Error, Debug)]
@@ -283,7 +288,10 @@ impl CommandBuffer {
     ///
     /// TODO: Check that everything the pipeline needs is also bound, i.e. vertex buffers, ubos,
     /// push constants etc
-    pub fn bind_pipeline<V>(&mut self, pipeline: &Pipeline<V>) where V: Vertex {
+    pub fn bind_pipeline<V>(&mut self, pipeline: &Pipeline<V>)
+    where
+        V: Vertex,
+    {
         unsafe {
             self.device.vk_handle().cmd_bind_pipeline(
                 self.handle,
@@ -293,6 +301,7 @@ impl CommandBuffer {
         };
     }
 
+    // TODO: check buffer has the VERTEX_BUFFER usage flag
     pub fn bind_vertex_buffer<T>(&mut self, buffer: &Buffer<T>) {
         let buffers = [buffer.vk_handle()];
         let offsets = [0];
@@ -301,6 +310,18 @@ impl CommandBuffer {
             self.device
                 .vk_handle()
                 .cmd_bind_vertex_buffers(self.handle, 0, &buffers, &offsets);
+        };
+    }
+
+    // TODO: check buffer has the INDEX_BUFFER usage flag
+    pub fn bind_index_buffer(&mut self, buffer: &Buffer<u32>) {
+        unsafe {
+            self.device.vk_handle().cmd_bind_index_buffer(
+                self.handle,
+                buffer.vk_handle(),
+                0,
+                vk::IndexType::UINT32,
+            );
         };
     }
 
@@ -318,6 +339,26 @@ impl CommandBuffer {
                 vertex_count,
                 instance_count,
                 first_vertex,
+                first_instance,
+            );
+        };
+    }
+
+    pub fn draw_indexed(
+        &self,
+        index_count: u32,
+        instance_count: u32,
+        first_index: u32,
+        vertex_offset: u32,
+        first_instance: u32,
+    ) {
+        unsafe {
+            self.device.vk_handle().cmd_draw_indexed(
+                self.handle,
+                index_count,
+                instance_count,
+                first_index,
+                vertex_offset as i32,
                 first_instance,
             );
         };
