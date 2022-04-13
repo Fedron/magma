@@ -142,7 +142,7 @@ pub mod prelude {
     pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 
     pub use crate::pipeline::shader::{Shader, ShaderError, ShaderStageFlags};
-    pub use crate::pipeline::vertex::{Vertex, VertexInputRate, VertexAttributeDescription, VertexBindingDescription, VkFormat};
+    pub use crate::pipeline::vertex::{EmptyVertex, Vertex, VertexInputRate, VertexAttributeDescription, VertexBindingDescription, VkFormat};
     pub use crate::pipeline::{Pipeline, PipelineBuilder, PipelineError};
 
     pub use crate::sync::{Fence, Semaphore};

@@ -57,3 +57,16 @@ pub trait Vertex {
     fn get_attribute_descriptions() -> Vec<VertexAttributeDescription>;
     fn get_binding_descriptions() -> Vec<VertexBindingDescription>;
 }
+
+pub struct EmptyVertex {}
+
+impl Vertex for EmptyVertex {
+    fn get_attribute_descriptions() -> Vec<VertexAttributeDescription> {
+        vec![]
+    }
+
+    fn get_binding_descriptions() -> Vec<VertexBindingDescription> {
+        vec![]
+    }
+}
+

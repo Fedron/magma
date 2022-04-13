@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     let vertex_shader = Shader::new("shaders/triangle.vert")?;
     let fragment_shader = Shader::new("shaders/triangle.frag")?;
 
-    let pipeline = Pipeline::builder()
+    let pipeline = Pipeline::<EmptyVertex>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())
