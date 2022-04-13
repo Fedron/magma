@@ -2,12 +2,12 @@
 
 use ash::vk;
 use shader::ShaderStageFlags;
-use std::{marker::PhantomData, rc::Rc};
+use std::{any::TypeId, marker::PhantomData, rc::Rc};
 
 use self::{
     config::PipelineConfigInfo,
     shader::{Shader, ShaderError, ShaderModule},
-    vertex::Vertex,
+    vertex::{EmptyVertex, Vertex},
 };
 use crate::{core::device::LogicalDevice, VulkanError};
 
@@ -46,7 +46,7 @@ where
     phantom: PhantomData<V>,
 }
 
-impl<V> PipelineBuilder<V>
+impl<V: 'static> PipelineBuilder<V>
 where
     V: Vertex,
 {
@@ -89,6 +89,18 @@ where
     pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline<V>, PipelineError> {
         if self.render_pass.is_none() {
             return Err(PipelineError::MissingRenderPass);
+        }
+
+        if TypeId::of::<V>() != TypeId::of::<EmptyVertex>() {
+            let vertex_shader = self.shaders
+                .iter()
+                .find(|&shader| shader.flags.contains(ShaderStageFlags::VERTEX));
+            
+            if vertex_shader.is_none() {
+                return Err(PipelineError::MissingShader("Pipeline has a non-empty vertex type, yet no vertex shader was attached to the pipeline"));
+            } else {
+                vertex_shader.unwrap().check_vertex_input::<V>()?;
+            }
         }
 
         let mut shader_modules: Vec<ShaderModule> = Vec::new();
@@ -186,7 +198,7 @@ where
     phantom: PhantomData<V>,
 }
 
-impl<V> Pipeline<V>
+impl<V: 'static> Pipeline<V>
 where
     V: Vertex,
 {

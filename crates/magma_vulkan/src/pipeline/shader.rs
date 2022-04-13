@@ -3,11 +3,11 @@ extern crate spirv_reflect;
 use ash::vk;
 use bitflags::bitflags;
 use spirv_reflect::{types::ReflectFormat, ShaderModule as SpirvShader};
-use std::{fmt::Debug, rc::Rc, ffi::CString};
+use std::{ffi::CString, fmt::Debug, rc::Rc};
 
 use crate::{core::device::LogicalDevice, VulkanError};
 
-use super::vertex::{Vertex, VertexAttributeDescription, VertexBindingDescription};
+use super::vertex::{Vertex, VertexAttributeDescription};
 
 /// Possible errors that could be returned by a [Shader]
 #[derive(thiserror::Error, Debug)]
@@ -46,10 +46,6 @@ pub struct Shader {
     pub flags: ShaderStageFlags,
     pub entry_point: CString,
 
-    pub should_define_vertex: bool,
-    pub vertex_attribute_descriptions: Option<Vec<VertexAttributeDescription>>,
-    pub vertex_binding_descriptions: Option<Vec<VertexBindingDescription>>,
-
     code: Vec<u32>,
     reflect: SpirvShader,
 }
@@ -76,27 +72,10 @@ impl Shader {
             ShaderError::InvalidDefinition("Invalid shader stage".to_string()),
         )?;
 
-        let mut should_define_vertex = false;
-        if shader_stage.contains(ShaderStageFlags::VERTEX) {
-            let input_variables = reflect
-                .enumerate_input_variables(Some(&entry_point))
-                .map_err(|err| ShaderError::CantParseSpv(err.to_string()))?;
-            if input_variables.iter().any(|var| {
-                !var.decoration_flags
-                    .contains(spirv_reflect::types::variable::ReflectDecorationFlags::BUILT_IN)
-            }) {
-                should_define_vertex = true;
-            }
-        }
-
         Ok(Shader {
             file_path,
             flags: shader_stage,
             entry_point: CString::new(entry_point).expect("Failed to create CString"),
-
-            should_define_vertex,
-            vertex_attribute_descriptions: None,
-            vertex_binding_descriptions: None,
 
             code,
             reflect,
@@ -104,73 +83,6 @@ impl Shader {
     }
 
     pub fn build(&self, device: Rc<LogicalDevice>) -> Result<ShaderModule, ShaderError> {
-        if self.should_define_vertex
-            && (self.vertex_attribute_descriptions.is_none()
-                || self.vertex_binding_descriptions.is_none())
-        {
-            return Err(ShaderError::InvalidDefinition("The spirv defines vertex attributes, but you haven't linked any, use .with_vertex<V>() to link vertex attributes".to_string()));
-        } else if self.should_define_vertex {
-            let input_variables = self
-                .reflect
-                .enumerate_input_variables(Some(&self.entry_point.to_str().expect("Failed to cast CString to str")))
-                .map_err(|err| ShaderError::CantParseSpv(err.into()))?;
-            let mut vertex_attribute_descriptions: Vec<VertexAttributeDescription> = Vec::new();
-            let mut offset = 0;
-            for input_variable in input_variables.iter() {
-                if input_variable.storage_class == spirv_reflect::types::ReflectStorageClass::Input
-                    && input_variable.decoration_flags.is_empty()
-                {
-                    let format = match input_variable.format {
-                        ReflectFormat::R32_SINT => vk::Format::R32_SINT,
-                        ReflectFormat::R32G32_SINT => vk::Format::R32G32_SINT,
-                        ReflectFormat::R32G32B32_SINT => vk::Format::R32G32B32_SINT,
-                        ReflectFormat::R32G32B32A32_SINT => vk::Format::R32G32B32A32_SINT,
-                        ReflectFormat::R32_SFLOAT => vk::Format::R32_SFLOAT,
-                        ReflectFormat::R32G32_SFLOAT => vk::Format::R32G32_SFLOAT,
-                        ReflectFormat::R32G32B32_SFLOAT => vk::Format::R32G32B32_SFLOAT,
-                        ReflectFormat::R32G32B32A32_SFLOAT => vk::Format::R32G32B32A32_SFLOAT,
-                        _ => {
-                            return Err(ShaderError::InvalidDefinition(format!(
-                                "Input variable `{}` has an unsupported type `{:#?}`",
-                                input_variable.name, input_variable.format
-                            )))
-                        }
-                    };
-
-                    vertex_attribute_descriptions.push(VertexAttributeDescription {
-                        location: input_variable.location,
-                        binding: 0,
-                        format,
-                        offset,
-                    });
-
-                    offset += input_variable.numeric.vector.component_count * 4;
-                }
-            }
-
-            for vertex_attribute in vertex_attribute_descriptions.iter() {
-                if let Some(user_vertex_attribute) = self
-                    .vertex_attribute_descriptions
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .find(|attr| attr.location == vertex_attribute.location)
-                {
-                    if vertex_attribute.ne(user_vertex_attribute) {
-                        return Err(
-                            ShaderError::InvalidDefinition(
-                                format!("Shader input variable at location {} does not match the variable in the struct you provided with `.with_vertex::<V>()` at the same location", vertex_attribute.location)
-                        ));
-                    }
-                } else {
-                    return Err(
-                        ShaderError::InvalidDefinition(
-                            format!("Shader contains input variable with definition: {:#?}\nbut the struct you provided with `.with_vertex::<V>()` doesn't contain a matching variable", vertex_attribute)
-                    ));
-                }
-            }
-        }
-
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&self.code);
         let handle = unsafe {
             device
@@ -184,13 +96,82 @@ impl Shader {
 }
 
 impl Shader {
-    pub fn with_vertex<V>(mut self) -> Shader
+    pub fn check_vertex_input<V>(&self) -> Result<(), ShaderError>
     where
         V: Vertex,
     {
-        self.vertex_attribute_descriptions = Some(V::get_attribute_descriptions());
-        self.vertex_binding_descriptions = Some(V::get_binding_descriptions());
-        self
+        let input_variables = self
+            .reflect
+            .enumerate_input_variables(Some(
+                &self
+                    .entry_point
+                    .to_str()
+                    .expect("Failed to cast CString to str"),
+            ))
+            .map_err(|err| ShaderError::CantParseSpv(err.into()))?;
+        let mut vertex_attribute_descriptions: Vec<VertexAttributeDescription> = Vec::new();
+        let mut offset = 0;
+        for input_variable in input_variables.iter() {
+            if input_variable.storage_class == spirv_reflect::types::ReflectStorageClass::Input
+                && input_variable.decoration_flags.is_empty()
+            {
+                let format = match input_variable.format {
+                    ReflectFormat::R32_SINT => vk::Format::R32_SINT,
+
+                    ReflectFormat::R32G32_SINT => vk::Format::R32G32_SINT,
+                    ReflectFormat::R32G32B32_SINT => vk::Format::R32G32B32_SINT,
+                    ReflectFormat::R32G32B32A32_SINT => vk::Format::R32G32B32A32_SINT,
+                    ReflectFormat::R32_SFLOAT => vk::Format::R32_SFLOAT,
+                    ReflectFormat::R32G32_SFLOAT => vk::Format::R32G32_SFLOAT,
+                    ReflectFormat::R32G32B32_SFLOAT => vk::Format::R32G32B32_SFLOAT,
+                    ReflectFormat::R32G32B32A32_SFLOAT => vk::Format::R32G32B32A32_SFLOAT,
+                    _ => {
+                        return Err(ShaderError::InvalidDefinition(format!(
+                            "Input variable `{}` has an unsupported type `{:#?}`",
+                            input_variable.name, input_variable.format
+                        )))
+                    }
+                };
+
+                vertex_attribute_descriptions.push(VertexAttributeDescription {
+                    location: input_variable.location,
+                    binding: 0,
+                    format,
+                    offset,
+                });
+
+                offset += input_variable.numeric.vector.component_count * 4;
+            }
+        }
+
+        if vertex_attribute_descriptions.len() != V::get_attribute_descriptions().len() {
+            return Err(
+                ShaderError::InvalidDefinition(
+                    format!("Shader contains {} input variable, but your Vertex struct only has {} fields", vertex_attribute_descriptions.len(), V::get_attribute_descriptions().len())
+                ));
+        }
+
+        for vertex_attribute in vertex_attribute_descriptions.iter() {
+            if let Some(user_vertex_attribute) =
+                V::get_attribute_descriptions()
+                .iter()
+                .find(|attr| attr.location == vertex_attribute.location)
+            {
+                if vertex_attribute.ne(user_vertex_attribute) {
+                    return Err(
+                            ShaderError::InvalidDefinition(
+                                format!("Shader input variable at location {} does not match the field in the Vertex struct you provided", vertex_attribute.location)
+                        ));
+                }
+            } else {
+                return Err(
+                        ShaderError::InvalidDefinition(
+                            format!("Shader contains input variable with definition: {:#?}\nbut the Vertex struct you provided doesn't contain a matching field", vertex_attribute)
+                    ));
+            }
+        }
+
+        Ok(())
     }
 }
 

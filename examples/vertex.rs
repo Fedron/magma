@@ -55,7 +55,7 @@ fn main() -> Result<()> {
     // layouts we defined in the shader
     //
     // This will also tell the pipeline to be created with vertex inputs
-    let vertex_shader = Shader::new("shaders/vertex.vert")?.with_vertex::<SimpleVertex>();
+    let vertex_shader = Shader::new("shaders/vertex.vert")?;
     let fragment_shader = Shader::new("shaders/vertex.frag")?;
 
     let pipeline = Pipeline::<SimpleVertex>::builder()
