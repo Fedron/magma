@@ -3,7 +3,7 @@ extern crate spirv_reflect;
 use ash::vk;
 use bitflags::bitflags;
 use spirv_reflect::{types::ReflectFormat, ShaderModule as SpirvShader};
-use std::{fmt::Debug, rc::Rc};
+use std::{fmt::Debug, rc::Rc, ffi::CString};
 
 use crate::{core::device::LogicalDevice, VulkanError};
 
@@ -44,7 +44,7 @@ impl Into<vk::ShaderStageFlags> for ShaderStageFlags {
 pub struct Shader {
     pub file_path: &'static str,
     pub flags: ShaderStageFlags,
-    pub entry_point: String,
+    pub entry_point: CString,
 
     pub should_define_vertex: bool,
     pub vertex_attribute_descriptions: Option<Vec<VertexAttributeDescription>>,
@@ -92,7 +92,7 @@ impl Shader {
         Ok(Shader {
             file_path,
             flags: shader_stage,
-            entry_point,
+            entry_point: CString::new(entry_point).expect("Failed to create CString"),
 
             should_define_vertex,
             vertex_attribute_descriptions: None,
@@ -112,7 +112,7 @@ impl Shader {
         } else if self.should_define_vertex {
             let input_variables = self
                 .reflect
-                .enumerate_input_variables(Some(&self.entry_point))
+                .enumerate_input_variables(Some(&self.entry_point.to_str().expect("Failed to cast CString to str")))
                 .map_err(|err| ShaderError::CantParseSpv(err.into()))?;
             let mut vertex_attribute_descriptions: Vec<VertexAttributeDescription> = Vec::new();
             let mut offset = 0;

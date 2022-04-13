@@ -87,8 +87,6 @@ where
     /// - [PipelineError::CantCreateLayout] and [PipelineError::CantCreatePipeline] - Failed to
     /// create required Vulkan objects, see the contained [VulkanError] for more information
     pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline<V>, PipelineError> {
-        use std::ffi::CStr;
-
         if self.render_pass.is_none() {
             return Err(PipelineError::MissingRenderPass);
         }
@@ -101,8 +99,7 @@ where
             shader_stages.push(
                 vk::PipelineShaderStageCreateInfo::builder()
                     .module(shader_module.vk_handle())
-                    // TODO: use entry point defined in shader_module
-                    .name(unsafe { CStr::from_bytes_with_nul_unchecked(b"main\0") })
+                    .name(&shader.entry_point)
                     .stage(shader.flags.into())
                     .build(),
             );
