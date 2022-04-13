@@ -1,7 +1,7 @@
 use ash::vk;
 use std::rc::Rc;
 
-use crate::{buffer::Buffer, core::device::LogicalDevice, pipeline::Pipeline, VulkanError};
+use crate::{buffer::Buffer, core::device::LogicalDevice, pipeline::{Pipeline, vertex::Vertex}, VulkanError};
 
 /// Errors that can be thrown by the CommandBuffer
 #[derive(thiserror::Error, Debug)]
@@ -283,7 +283,7 @@ impl CommandBuffer {
     ///
     /// TODO: Check that everything the pipeline needs is also bound, i.e. vertex buffers, ubos,
     /// push constants etc
-    pub fn bind_pipeline(&mut self, pipeline: &Pipeline) {
+    pub fn bind_pipeline<V>(&mut self, pipeline: &Pipeline<V>) where V: Vertex {
         unsafe {
             self.device.vk_handle().cmd_bind_pipeline(
                 self.handle,

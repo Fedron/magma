@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     let vertex_shader = Shader::new("shaders/vertex.vert")?.with_vertex::<SimpleVertex>();
     let fragment_shader = Shader::new("shaders/vertex.frag")?;
 
-    let pipeline = Pipeline::builder()
+    let pipeline = Pipeline::<SimpleVertex>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())

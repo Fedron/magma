@@ -2,11 +2,12 @@
 
 use ash::vk;
 use shader::ShaderStageFlags;
-use std::rc::Rc;
+use std::{marker::PhantomData, rc::Rc};
 
 use self::{
     config::PipelineConfigInfo,
     shader::{Shader, ShaderError, ShaderModule},
+    vertex::Vertex,
 };
 use crate::{core::device::LogicalDevice, VulkanError};
 
@@ -32,36 +33,47 @@ pub enum PipelineError {
 }
 
 /// Allows you to create a graphics pipeline
-#[derive(Default)]
-pub struct PipelineBuilder {
+pub struct PipelineBuilder<V>
+where
+    V: Vertex,
+{
     /// Collection of shaders the pipeline will consist of
     shaders: Vec<Shader>,
     /// Render pass to use for this pipeline
     render_pass: Option<vk::RenderPass>,
     /// Fixed function configuration
     config: PipelineConfigInfo,
+    phantom: PhantomData<V>,
 }
 
-impl PipelineBuilder {
+impl<V> PipelineBuilder<V>
+where
+    V: Vertex,
+{
     /// Creates a new default [PipelineBuilder]
-    pub fn new() -> PipelineBuilder {
-        PipelineBuilder::default()
+    pub fn new() -> PipelineBuilder<V> {
+        PipelineBuilder {
+            shaders: Vec::new(),
+            render_pass: None,
+            config: PipelineConfigInfo::default(),
+            phantom: PhantomData,
+        }
     }
 
     /// Adds a [Shader] to the [PipelineBuilder]
-    pub fn attach_shader(mut self, shader: Shader) -> PipelineBuilder {
+    pub fn attach_shader(mut self, shader: Shader) -> PipelineBuilder<V> {
         self.shaders.push(shader);
         self
     }
 
     /// Sets the configuration of the fixed function stages in the [Pipeline]
-    pub fn config(mut self, config: PipelineConfigInfo) -> PipelineBuilder {
+    pub fn config(mut self, config: PipelineConfigInfo) -> PipelineBuilder<V> {
         self.config = config;
         self
     }
 
     /// Sets the render pass to use for the pipeline
-    pub fn render_pass(mut self, render_pass: vk::RenderPass) -> PipelineBuilder {
+    pub fn render_pass(mut self, render_pass: vk::RenderPass) -> PipelineBuilder<V> {
         self.render_pass = Some(render_pass);
         self
     }
@@ -74,7 +86,7 @@ impl PipelineBuilder {
     /// - [PipelineError::MissingRenderPass] - You need to provide a render pass for the pipeiline
     /// - [PipelineError::CantCreateLayout] and [PipelineError::CantCreatePipeline] - Failed to
     /// create required Vulkan objects, see the contained [VulkanError] for more information
-    pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline, PipelineError> {
+    pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline<V>, PipelineError> {
         use std::ffi::CStr;
 
         if self.render_pass.is_none() {
@@ -97,37 +109,19 @@ impl PipelineBuilder {
             shader_modules.push(shader_module);
         }
 
-        let vertex_shader = self
-            .shaders
-            .iter()
-            .find(|&shader| shader.flags.contains(ShaderStageFlags::VERTEX));
-        let (vertex_attribute_descriptions, vertex_binding_descriptions) = if vertex_shader
-            .is_none()
-        {
-            return Err(PipelineError::MissingShader("Vertex"));
-        } else {
-            let shader = vertex_shader.unwrap();
-            if !shader.should_define_vertex {
-                (Vec::new(), Vec::new())
-            } else {
-                let vertex_attribute_descriptions: Vec<vk::VertexInputAttributeDescription> =
-                    shader
-                        .vertex_attribute_descriptions
-                        .as_ref()
-                        .unwrap()
-                        .iter()
-                        .map(|&description| description.into())
-                        .collect();
-                let vertex_binding_descriptions: Vec<vk::VertexInputBindingDescription> = shader
-                    .vertex_binding_descriptions
-                    .as_ref()
-                    .unwrap()
+        let (vertex_attribute_descriptions, vertex_binding_descriptions) = {
+            let vertex_attribute_descriptions: Vec<vk::VertexInputAttributeDescription> =
+                V::get_attribute_descriptions()
+                    .iter()
+                    .map(|&description| description.into())
+                    .collect();
+            let vertex_binding_descriptions: Vec<vk::VertexInputBindingDescription> =
+                V::get_binding_descriptions()
                     .iter()
                     .map(|&description| description.into())
                     .collect();
 
-                (vertex_attribute_descriptions, vertex_binding_descriptions)
-            }
+            (vertex_attribute_descriptions, vertex_binding_descriptions)
         };
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_attribute_descriptions(&vertex_attribute_descriptions)
@@ -174,12 +168,16 @@ impl PipelineBuilder {
             layout,
             handle,
             device,
+            phantom: PhantomData,
         })
     }
 }
 
 /// Represents a Graphics pipeline that can be used to draw to a surface
-pub struct Pipeline {
+pub struct Pipeline<V>
+where
+    V: Vertex,
+{
     /// List of the shader modules being used by the [Pipeline]
     _shader_modules: Vec<ShaderModule>,
     /// Opaque handle to Vulkan layout used to create the pipeline
@@ -188,23 +186,33 @@ pub struct Pipeline {
     handle: vk::Pipeline,
     /// Logical device this pipeline belongs to
     device: Rc<LogicalDevice>,
+    phantom: PhantomData<V>,
 }
 
-impl Pipeline {
+impl<V> Pipeline<V>
+where
+    V: Vertex,
+{
     /// Creates a new [PipelineBuilder]
-    pub fn builder() -> PipelineBuilder {
+    pub fn builder() -> PipelineBuilder<V> {
         PipelineBuilder::new()
     }
 }
 
-impl Pipeline {
+impl<V> Pipeline<V>
+where
+    V: Vertex,
+{
     /// Returns the handle to the Vulkan pipeline
     pub(crate) fn vk_handle(&self) -> vk::Pipeline {
         self.handle
     }
 }
 
-impl Drop for Pipeline {
+impl<V> Drop for Pipeline<V>
+where
+    V: Vertex,
+{
     fn drop(&mut self) {
         unsafe {
             self.device
