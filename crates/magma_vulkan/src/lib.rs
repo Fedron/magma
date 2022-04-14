@@ -142,7 +142,7 @@ pub mod prelude {
     pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 
     pub use crate::pipeline::shader::{Shader, ShaderError, ShaderStageFlags};
-    pub use crate::pipeline::ubo::{UboFieldDescription, UniformBuffer};
+    pub use crate::pipeline::ubo::{UboFieldDescription, UniformBuffer, EmptyPushConstant};
     pub use crate::pipeline::vertex::{EmptyVertex, Vertex, VertexInputRate, VertexAttributeDescription, VertexBindingDescription, VkFormat};
     pub use crate::pipeline::{Pipeline, PipelineBuilder, PipelineError};
 

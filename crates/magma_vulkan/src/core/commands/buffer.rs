@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::{
     buffer::Buffer,
     core::device::LogicalDevice,
-    pipeline::{vertex::Vertex, Pipeline},
+    pipeline::{vertex::Vertex, ubo::UniformBuffer, Pipeline},
     VulkanError,
 };
 
@@ -288,9 +288,10 @@ impl CommandBuffer {
     ///
     /// TODO: Check that everything the pipeline needs is also bound, i.e. vertex buffers, ubos,
     /// push constants etc
-    pub fn bind_pipeline<V>(&mut self, pipeline: &Pipeline<V>)
+    pub fn bind_pipeline<V, P>(&mut self, pipeline: &Pipeline<V, P>)
     where
         V: Vertex,
+        P: UniformBuffer
     {
         unsafe {
             self.device.vk_handle().cmd_bind_pipeline(

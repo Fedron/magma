@@ -56,7 +56,7 @@ fn main() -> Result<()> {
 
     // Since we are using a Vertex struct to define our vertices, we need the pipeline to use the
     // same generic type
-    let pipeline = Pipeline::<SimpleVertex>::builder()
+    let pipeline = Pipeline::<SimpleVertex, EmptyPushConstant>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())

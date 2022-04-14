@@ -8,6 +8,7 @@ use self::{
     config::PipelineConfigInfo,
     shader::{Shader, ShaderError, ShaderModule},
     vertex::{EmptyVertex, Vertex},
+    ubo::{UniformBuffer, UboFieldDescription},
 };
 use crate::{core::device::LogicalDevice, VulkanError};
 
@@ -34,9 +35,10 @@ pub enum PipelineError {
 }
 
 /// Allows you to create a graphics pipeline
-pub struct PipelineBuilder<V>
+pub struct PipelineBuilder<V, P>
 where
     V: Vertex,
+    P: UniformBuffer,
 {
     /// Collection of shaders the pipeline will consist of
     shaders: Vec<Shader>,
@@ -44,37 +46,40 @@ where
     render_pass: Option<vk::RenderPass>,
     /// Fixed function configuration
     config: PipelineConfigInfo,
-    phantom: PhantomData<V>,
+    v_phantom: PhantomData<V>,
+    p_phantom: PhantomData<P>,
 }
 
-impl<V: 'static> PipelineBuilder<V>
+impl<V: 'static, P: 'static> PipelineBuilder<V, P>
 where
     V: Vertex,
+    P: UniformBuffer
 {
     /// Creates a new default [PipelineBuilder]
-    pub fn new() -> PipelineBuilder<V> {
+    pub fn new() -> PipelineBuilder<V, P> {
         PipelineBuilder {
             shaders: Vec::new(),
             render_pass: None,
             config: PipelineConfigInfo::default(),
-            phantom: PhantomData,
+            v_phantom: PhantomData,
+            p_phantom: PhantomData,
         }
     }
 
     /// Adds a [Shader] to the [PipelineBuilder]
-    pub fn attach_shader(mut self, shader: Shader) -> PipelineBuilder<V> {
+    pub fn attach_shader(mut self, shader: Shader) -> PipelineBuilder<V, P> {
         self.shaders.push(shader);
         self
     }
 
     /// Sets the configuration of the fixed function stages in the [Pipeline]
-    pub fn config(mut self, config: PipelineConfigInfo) -> PipelineBuilder<V> {
+    pub fn config(mut self, config: PipelineConfigInfo) -> PipelineBuilder<V, P> {
         self.config = config;
         self
     }
 
     /// Sets the render pass to use for the pipeline
-    pub fn render_pass(mut self, render_pass: vk::RenderPass) -> PipelineBuilder<V> {
+    pub fn render_pass(mut self, render_pass: vk::RenderPass) -> PipelineBuilder<V, P> {
         self.render_pass = Some(render_pass);
         self
     }
@@ -87,7 +92,7 @@ where
     /// - [PipelineError::MissingRenderPass] - You need to provide a render pass for the pipeiline
     /// - [PipelineError::CantCreateLayout] and [PipelineError::CantCreatePipeline] - Failed to
     /// create required Vulkan objects, see the contained [VulkanError] for more information
-    pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline<V>, PipelineError> {
+    pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline<V, P>, PipelineError> {
         if self.render_pass.is_none() {
             return Err(PipelineError::MissingRenderPass);
         }
@@ -178,15 +183,17 @@ where
             layout,
             handle,
             device,
-            phantom: PhantomData,
+            v_phantom: PhantomData,
+            p_phantom: PhantomData,
         })
     }
 }
 
 /// Represents a Graphics pipeline that can be used to draw to a surface
-pub struct Pipeline<V>
+pub struct Pipeline<V, P>
 where
     V: Vertex,
+    P: UniformBuffer
 {
     /// List of the shader modules being used by the [Pipeline]
     _shader_modules: Vec<ShaderModule>,
@@ -196,22 +203,25 @@ where
     handle: vk::Pipeline,
     /// Logical device this pipeline belongs to
     device: Rc<LogicalDevice>,
-    phantom: PhantomData<V>,
+    v_phantom: PhantomData<V>,
+    p_phantom: PhantomData<P>,
 }
 
-impl<V: 'static> Pipeline<V>
+impl<V: 'static, P: 'static> Pipeline<V, P>
 where
     V: Vertex,
+    P: UniformBuffer
 {
     /// Creates a new [PipelineBuilder]
-    pub fn builder() -> PipelineBuilder<V> {
+    pub fn builder() -> PipelineBuilder<V, P> {
         PipelineBuilder::new()
     }
 }
 
-impl<V> Pipeline<V>
+impl<V, P> Pipeline<V, P>
 where
     V: Vertex,
+    P: UniformBuffer
 {
     /// Returns the handle to the Vulkan pipeline
     pub(crate) fn vk_handle(&self) -> vk::Pipeline {
@@ -219,9 +229,10 @@ where
     }
 }
 
-impl<V> Drop for Pipeline<V>
+impl<V, P> Drop for Pipeline<V, P>
 where
     V: Vertex,
+    P: UniformBuffer
 {
     fn drop(&mut self) {
         unsafe {

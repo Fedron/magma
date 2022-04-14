@@ -29,9 +29,6 @@ struct PushConstant {
 }
 
 fn main() -> Result<()> {
-    println!("{:#?}", PushConstant::stage());
-    println!("{:#?}", PushConstant::get_field_descriptions());
-
     simple_logger::SimpleLogger::new()
         .without_timestamps()
         .init()
@@ -62,6 +59,9 @@ fn main() -> Result<()> {
 
     let vertex_shader = Shader::new("shaders/vertex.vert")?;
     let fragment_shader = Shader::new("shaders/vertex.frag")?;
+
+    println!("{:#?}", PushConstant::stage());
+    println!("{:#?}", PushConstant::get_field_descriptions());
 
     let pipeline = Pipeline::<SimpleVertex>::builder()
         .attach_shader(vertex_shader)

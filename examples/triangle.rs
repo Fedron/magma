@@ -59,8 +59,10 @@ fn main() -> Result<()> {
     let fragment_shader = Shader::new("shaders/triangle.frag")?;
 
     // A pipeline requires a Vertex generic, but in this case we aren't using a vertex buffer and
-    // so we can set the generic to be `EmptyVertex`
-    let pipeline = Pipeline::<EmptyVertex>::builder()
+    // so we can set the generic to be `EmptyVertex`, A pipeline also requires a UniformBuffer
+    // generic that will represent a push constant in the shader but since in this case we aren't
+    // using a push constant we can set the generic to be `EmptyPushConstant`
+    let pipeline = Pipeline::<EmptyVertex, EmptyPushConstant>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())
