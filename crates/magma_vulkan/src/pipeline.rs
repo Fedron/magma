@@ -8,9 +8,9 @@ use self::{
     config::PipelineConfigInfo,
     shader::{Shader, ShaderError, ShaderModule},
     vertex::{EmptyVertex, Vertex},
-    ubo::{UniformBuffer, UboFieldDescription},
+    ubo::{UniformBuffer, EmptyPushConstant},
 };
-use crate::{core::device::LogicalDevice, VulkanError};
+use crate::{core::{device::LogicalDevice, commands::buffer::CommandBuffer}, VulkanError};
 
 pub mod config;
 pub mod shader;
@@ -29,7 +29,7 @@ pub enum PipelineError {
     #[error("Failed to create Vulkan pipeline: {0}")]
     CantCreatePipeline(VulkanError),
     #[error("Missing shader with shader stage: {0}")]
-    MissingShader(&'static str),
+    MissingShader(String),
     #[error("Building a shader failed: {0}")]
     ShaderError(#[from] ShaderError),
 }
@@ -103,9 +103,33 @@ where
                 .find(|&shader| shader.flags.contains(ShaderStageFlags::VERTEX));
             
             if vertex_shader.is_none() {
-                return Err(PipelineError::MissingShader("Pipeline has a non-empty vertex type, yet no vertex shader was attached to the pipeline"));
+                return Err(PipelineError::MissingShader("Pipeline has a non-empty vertex type, yet no vertex shader was attached to the pipeline".to_string()));
             } else {
                 vertex_shader.unwrap().check_vertex_input::<V>()?;
+            }
+        }
+
+        if TypeId::of::<P>() != TypeId::of::<EmptyPushConstant>() {
+            let shaders: Vec<&Shader> = self.shaders.iter().filter(|&shader| shader.flags.intersects(P::stage())).collect();
+
+            // Remove each flag from each shader we have to see if we are missing any shader stages
+            // the push constant requires
+            let mut required_shaders = P::stage();
+            for &shader in shaders.iter() {
+                required_shaders.remove(shader.flags);
+            }
+            if !required_shaders.is_empty() {
+                return Err(
+                    PipelineError::MissingShader(
+                        format!(
+                            "Pipeline has a non-empty push constant type that requires {:#?} shaders, but shaders with flags {:#?} were not attached to the pipeline",
+                            P::stage(),
+                            required_shaders
+                    )));
+            }
+
+            for &shader in shaders.iter() {
+                shader.check_push_constant::<P>()?;
             }
         }
 
@@ -142,8 +166,19 @@ where
             .vertex_attribute_descriptions(&vertex_attribute_descriptions)
             .vertex_binding_descriptions(&vertex_binding_descriptions);
 
+        let mut push_constant_ranges: Vec<vk::PushConstantRange> = Vec::new();
+        if TypeId::of::<P>() != TypeId::of::<EmptyPushConstant>() {
+            push_constant_ranges.push(
+                vk::PushConstantRange::builder()
+                    .stage_flags(P::stage().into())
+                    .offset(0)
+                    .size(std::mem::size_of::<P>() as u32)
+                    .build(),
+            );
+        }
+
         let layout_create_info = vk::PipelineLayoutCreateInfo::builder()
-            .push_constant_ranges(&[])
+            .push_constant_ranges(&push_constant_ranges)
             .set_layouts(&[]);
 
         let layout = unsafe {
@@ -226,6 +261,24 @@ where
     /// Returns the handle to the Vulkan pipeline
     pub(crate) fn vk_handle(&self) -> vk::Pipeline {
         self.handle
+    }
+}
+
+impl<V, P> Pipeline<V, P>
+where
+    V: Vertex,
+    P: UniformBuffer
+{
+    pub fn set_push_constant(&self, command_buffer: &CommandBuffer, data: P) {
+        unsafe {
+            self.device.vk_handle().cmd_push_constants(
+                command_buffer.vk_handle(),
+                self.layout,
+                P::stage().into(),
+                0,
+                data.as_bytes()
+            );
+        };
     }
 }
 

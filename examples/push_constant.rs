@@ -21,11 +21,14 @@ struct SimpleVertex {
     color: [f32; 3],
 }
 
+// This will be our push constant we use in the pipeline, when deriving `UniformBuffer` make to
+// also set the stage attribute so that the `Pipeline` will know what stage to expect the push
+// constant at
 #[derive(UniformBuffer)]
 #[ubo(stage = "vertex")]
 struct PushConstant {
-    pub offset: u32,
-    pub color: [f32; 3],
+    pub _offset: [f32; 2],
+    pub _color: [f32; 3],
 }
 
 fn main() -> Result<()> {
@@ -57,13 +60,12 @@ fn main() -> Result<()> {
         .preferred_present_mode(PresentMode::Mailbox)
         .build(logical_device.clone(), &surface)?;
 
-    let vertex_shader = Shader::new("shaders/vertex.vert")?;
-    let fragment_shader = Shader::new("shaders/vertex.frag")?;
+    let vertex_shader = Shader::new("shaders/push_constant.vert")?;
+    let fragment_shader = Shader::new("shaders/push_constant.frag")?;
 
-    println!("{:#?}", PushConstant::stage());
-    println!("{:#?}", PushConstant::get_field_descriptions());
-
-    let pipeline = Pipeline::<SimpleVertex>::builder()
+    // Since we want to use a push constant in our graphics pipeline we need to set the P generic
+    // type on the pipeline to a valid struct that derives UniformBuffer
+    let pipeline = Pipeline::<SimpleVertex, PushConstant>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())
@@ -117,8 +119,6 @@ fn main() -> Result<()> {
     )?;
     vertex_buffer.copy_from(&staging_buffer, &command_pool)?;
 
-    // In the same way that we upload our vertices to vertex buffer through a staging buffer we
-    // will upload our Indices
     let mut staging_buffer = Buffer::<u32>::new(
         logical_device.clone(),
         6,
@@ -129,8 +129,6 @@ fn main() -> Result<()> {
     staging_buffer.map(u64::MAX, 0)?;
     staging_buffer.write(&[0, 3, 1, 1, 3, 2]);
 
-    // Since this buffer will be used as an index buffer we need to mark it as such using the
-    // INDEX_BUFFER buffer usage flag
     let mut index_buffer = Buffer::<u32>::new(
         logical_device.clone(),
         6,
@@ -189,10 +187,14 @@ fn main() -> Result<()> {
         command_buffer.set_scissor(extent.clone())?;
 
         command_buffer.bind_pipeline(&pipeline);
+        // Once we bind our pipeline, we need to set the push constant data
+        pipeline.set_push_constant(&command_buffer, PushConstant {
+            _offset: [0.25, -0.25],
+            _color: [0.5, 0.5, 0.5],
+        });
+
         command_buffer.bind_vertex_buffer(&vertex_buffer);
-        // Before we can draw using an index buffer we need to make sure we bind it
         command_buffer.bind_index_buffer(&index_buffer);
-        // We then draw using the `draw_indexed` command instead
         command_buffer.draw_indexed(6, 1, 0, 0, 0);
 
         command_buffer.end_render_pass();

@@ -7,7 +7,10 @@ use std::{ffi::CString, fmt::Debug, rc::Rc};
 
 use crate::{core::device::LogicalDevice, VulkanError};
 
-use super::vertex::{Vertex, VertexAttributeDescription};
+use super::{
+    ubo::{UboFieldDescription, UniformBuffer},
+    vertex::{Vertex, VertexAttributeDescription},
+};
 
 /// Possible errors that could be returned by a [Shader]
 #[derive(thiserror::Error, Debug)]
@@ -48,6 +51,16 @@ pub struct Shader {
 
     code: Vec<u32>,
     reflect: SpirvShader,
+}
+
+impl Debug for Shader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Shader")
+            .field("file_path", &self.file_path)
+            .field("flags", &self.flags)
+            .field("entry_point", &self.entry_point)
+            .finish()
+    }
 }
 
 impl Shader {
@@ -145,15 +158,15 @@ impl Shader {
         }
 
         if vertex_attribute_descriptions.len() != V::get_attribute_descriptions().len() {
-            return Err(
-                ShaderError::InvalidDefinition(
-                    format!("Shader contains {} input variable, but your Vertex struct only has {} fields", vertex_attribute_descriptions.len(), V::get_attribute_descriptions().len())
-                ));
+            return Err(ShaderError::InvalidDefinition(format!(
+                "Shader contains {} input variable, but your Vertex struct only has {} fields",
+                vertex_attribute_descriptions.len(),
+                V::get_attribute_descriptions().len()
+            )));
         }
 
         for vertex_attribute in vertex_attribute_descriptions.iter() {
-            if let Some(user_vertex_attribute) =
-                V::get_attribute_descriptions()
+            if let Some(user_vertex_attribute) = V::get_attribute_descriptions()
                 .iter()
                 .find(|attr| attr.location == vertex_attribute.location)
             {
@@ -168,6 +181,53 @@ impl Shader {
                         ShaderError::InvalidDefinition(
                             format!("Shader contains input variable with definition: {:#?}\nbut the Vertex struct you provided doesn't contain a matching field", vertex_attribute)
                     ));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn check_push_constant<P>(&self) -> Result<(), ShaderError>
+    where
+        P: UniformBuffer,
+    {
+        let push_constants = self
+            .reflect
+            .enumerate_push_constant_blocks(Some(
+                &self
+                    .entry_point
+                    .to_str()
+                    .expect("Failed to cast CString to str"),
+            ))
+            .map_err(|err| ShaderError::CantParseSpv(err.into()))?;
+        if push_constants.len() != 1 {
+            return Err(ShaderError::InvalidDefinition("Shader doesn't define, or defines too many, push constant".to_string()));
+        }
+        let push_constant = &push_constants[0];
+
+        let mut field_descriptions: Vec<UboFieldDescription> = Vec::new();
+        for member in push_constant.members.iter() {
+            field_descriptions.push(UboFieldDescription {
+                size: member.type_description.as_ref().unwrap().traits.numeric.vector.component_count as usize * 4
+            });
+        }
+
+        if field_descriptions.len() != P::get_field_descriptions().len() {
+            return Err(ShaderError::InvalidDefinition(format!(
+                "Shader contains {} fields in push constant, but your UniformBuffer struct only has {} fields",
+                field_descriptions.len(),
+                P::get_field_descriptions().len()
+            )));
+        }
+
+        for (index, (field_description, user_field_description)) in field_descriptions.iter().zip(P::get_field_descriptions().iter()).enumerate() {
+            if field_description.size != user_field_description.size {
+                return Err(ShaderError::InvalidDefinition(format!(
+                    "Shader contains field with definition: {:#?} but your struct doesn't have a matching field, instead it has {:#?} at the same index {}",
+                    field_description,
+                    user_field_description,
+                    index
+                )));
             }
         }
 
