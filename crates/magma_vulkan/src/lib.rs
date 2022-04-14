@@ -7,6 +7,7 @@ mod pipeline;
 mod sync;
 mod utils;
 mod buffer;
+mod descriptors;
 
 use ash::vk::Result as VkResult;
 
