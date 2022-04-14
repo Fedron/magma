@@ -5,7 +5,129 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+use darling::FromDeriveInput;
 use proc_macro::TokenStream;
+
+#[derive(FromDeriveInput, Default)]
+#[darling(default, attributes(ubo))]
+struct UniformBufferOpts {
+    stage: Option<String>,
+}
+
+#[proc_macro_derive(UniformBuffer, attributes(ubo))]
+pub fn derive_uniform_buffer(input: TokenStream) -> TokenStream {
+    let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
+    let ident = &ast.ident;
+
+    let opts = UniformBufferOpts::from_derive_input(&ast)
+        .expect("Provided unvalid options, only expected `stage`");
+    let stage = opts.stage.expect("No stage provided").to_lowercase();
+    let stage = stage.as_str();
+    let stage = match stage {
+        "vertex" => quote! { ShaderStageFlags::VERTEX },
+        "fragment" => quote! { ShaderStageFlags::FRAGMENT },
+        "compute" => quote! { ShaderStageFlags::COMPUTE },
+        "all_graphics" => quote! { ShaderStageFlags::ALL_GRAPHICS },
+        _ => panic!("Unsupported shader stage, must be one of ['vertex', 'fragment', 'compute', 'all_graphics']")
+    };
+
+    let descriptions = generate_field_descriptions(&ast.data);
+
+    quote! {
+        impl UniformBuffer for #ident {
+            /// TODO: Correct alignment automatically
+            ///
+            /// Scalars need to be aligned by N (= 4 bytes)
+            /// Vec2 needs to be aligned by 2N (= 8 bytes)
+            /// Vec3 and vec4 need to be aligned by 4N (= 16 bytes)
+            /// A nested struct needs the base alignment of each member rounded to a multiple of 16
+            /// A mat4 needs to have the same alignment as a vec4
+            fn as_bytes(&self) -> &[u8] {
+                unsafe {
+                    let size_in_bytes = ::std::mem::size_of::<Self>();
+                    let size_in_u8 = size_in_bytes / ::std::mem::size_of::<u8>();
+                    std::slice::from_raw_parts(self as *const Self as *const u8, size_in_u8)
+                }
+            }
+
+            fn stage() -> ShaderStageFlags {
+                #stage
+            }
+
+            fn get_field_descriptions() -> Vec<UboFieldDescription> {
+                #descriptions
+            }
+        }
+    }
+    .into()
+}
+
+fn generate_field_descriptions(data: &syn::Data) -> proc_macro2::TokenStream {
+    let mut sizes: Vec<usize> = Vec::new();
+
+    match data {
+        syn::Data::Struct(data) => {
+            for field in data.fields.iter() {
+                sizes.push(get_field_size(field));
+            }
+
+            let mut descriptions: Vec<proc_macro2::TokenStream> = Vec::new();
+            for &size in sizes.iter() {
+                descriptions.push(quote! {
+                    UboFieldDescription {
+                        size: #size
+                    }
+                });
+            }
+
+            quote! {
+                vec![
+                    #(#descriptions),*
+                ]
+            }
+        }
+        _ => panic!("Only a struct derive UniformBuffer"),
+    }
+}
+
+fn get_field_size(field: &syn::Field) -> usize {
+    let field_name = &field.ident.as_ref().unwrap();
+    match &field.ty {
+        syn::Type::Path(ref path) => {
+            let ty = format!("{}", path.path.get_ident().unwrap());
+            let ty = ty.as_str();
+            match ty {
+                "u32" => ::std::mem::size_of::<u32>(),
+                _ => panic!("Type `{}` on field `{}` is not supported", ty, field_name)
+            }
+        },
+        syn::Type::Array(array) => {
+            let array_type = match &*array.elem {
+                syn::Type::Path(path) => path
+                    .path
+                    .get_ident()
+                    .expect("Failed to get ident of array")
+                    .to_string(),
+                _ => panic!("Failed to read array type on field `{}`", field_name),
+            };
+
+            let array_len  = match &array.len {
+                syn::Expr::Lit(lit) => match &lit.lit {
+                    syn::Lit::Int(i) => i.base10_parse::<u32>().unwrap(),
+                    _ => panic!("Field `{}` has unexpected literal in array type", field_name)
+                },
+                _ => panic!("Field `{}` has unexpected literal in array type", field_name)
+            };
+
+            if array_type.ne("f32") {
+                panic!("Field `{}` must be an f32 array", field_name);
+            }
+
+            (4 * array_len) as usize
+        },
+        _ => panic!("Field `{}` has unsupported type", field_name)
+    }
+}
 
 #[proc_macro_derive(Vertex, attributes(location))]
 pub fn vertex_derive(input: TokenStream) -> TokenStream {

@@ -13,6 +13,7 @@ use crate::{core::device::LogicalDevice, VulkanError};
 
 pub mod config;
 pub mod shader;
+pub mod ubo;
 pub mod vertex;
 
 /// Errors that can be thrown by the pipeline
