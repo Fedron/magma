@@ -118,7 +118,7 @@ impl DescriptorAllocator {
 }
 
 impl DescriptorAllocator {
-    pub fn create_pool(
+    pub(crate) fn create_pool(
         &mut self,
         count: u32,
     ) -> Result<vk::DescriptorPool, DescriptorAllocatorError> {
@@ -147,7 +147,7 @@ impl DescriptorAllocator {
         Ok(handle)
     }
 
-    pub fn get_pool(&mut self) -> Result<vk::DescriptorPool, DescriptorAllocatorError> {
+    pub(crate) fn get_pool(&mut self) -> Result<vk::DescriptorPool, DescriptorAllocatorError> {
         if self.free_pools.len() > 0 {
             Ok(self.free_pools.pop_back().unwrap())
         } else {
@@ -157,9 +157,8 @@ impl DescriptorAllocator {
 
     pub fn allocate(
         &mut self,
-        set: &mut vk::DescriptorSet,
         layout: vk::DescriptorSetLayout,
-    ) -> Result<(), DescriptorAllocatorError> {
+    ) -> Result<vk::DescriptorSet, DescriptorAllocatorError> {
         if vk::Handle::as_raw(self.current_pool) == 0 {
             self.current_pool = self.get_pool()?;
             self.used_pools.push(self.current_pool);
@@ -175,7 +174,7 @@ impl DescriptorAllocator {
                 .vk_handle()
                 .allocate_descriptor_sets(&allocate_info)
         } {
-            Ok(_) => Ok(()),
+            Ok(handles) => Ok(handles.first().unwrap().clone()),
             Err(err) => {
                 let vk_error: VulkanError = err.into();
                 match vk_error {
@@ -186,7 +185,7 @@ impl DescriptorAllocator {
                         let allocate_info = vk::DescriptorSetAllocateInfo::builder()
                             .set_layouts(&set_layouts)
                             .descriptor_pool(self.current_pool);
-                        unsafe {
+                        let handles = unsafe {
                             self.device
                                 .vk_handle()
                                 .allocate_descriptor_sets(&allocate_info)
@@ -197,7 +196,7 @@ impl DescriptorAllocator {
                                 })?
                         };
 
-                        Ok(())
+                        Ok(handles.first().unwrap().clone())
                     }
                     _ => Err(DescriptorAllocatorError::DeviceError(
                         LogicalDeviceError::Other(vk_error),
@@ -207,7 +206,7 @@ impl DescriptorAllocator {
         }
     }
     
-    pub fn reset_pools(&mut self) {
+    pub(crate) fn reset_pools(&mut self) {
         for &pool in self.used_pools.iter() {
             unsafe {
                 self.device.vk_handle().reset_descriptor_pool(pool, vk::DescriptorPoolResetFlags::empty()).unwrap();

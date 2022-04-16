@@ -142,6 +142,10 @@ pub mod prelude {
     pub use crate::core::surface::{Surface, SurfaceError};
     pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 
+    pub use crate::descriptors::{DescriptorBuilder, DescriptorBuilderError};
+    pub use crate::descriptors::allocator::{DescriptorAllocator, DescriptorAllocatorError, DescriptorType};
+    pub use crate::descriptors::cache::{DescriptorLayoutCache, DescriptorCacheError};
+
     pub use crate::pipeline::shader::{Shader, ShaderError, ShaderStageFlags};
     pub use crate::pipeline::ubo::{UboFieldDescription, UniformBuffer, EmptyPushConstant};
     pub use crate::pipeline::vertex::{EmptyVertex, Vertex, VertexInputRate, VertexAttributeDescription, VertexBindingDescription, VkFormat};

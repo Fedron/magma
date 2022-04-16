@@ -69,7 +69,7 @@ impl DescriptorLayoutCache {
 }
 
 impl DescriptorLayoutCache {
-    pub fn create_descriptor_layout(
+    pub(crate) fn create_descriptor_layout(
         &mut self,
         create_info: vk::DescriptorSetLayoutCreateInfo,
     ) -> Result<vk::DescriptorSetLayout, DescriptorCacheError> {

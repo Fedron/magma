@@ -7,10 +7,13 @@ use std::{any::TypeId, marker::PhantomData, rc::Rc};
 use self::{
     config::PipelineConfigInfo,
     shader::{Shader, ShaderError, ShaderModule},
+    ubo::{EmptyPushConstant, UniformBuffer},
     vertex::{EmptyVertex, Vertex},
-    ubo::{UniformBuffer, EmptyPushConstant},
 };
-use crate::{core::{device::LogicalDevice, commands::buffer::CommandBuffer}, VulkanError};
+use crate::{
+    core::{commands::buffer::CommandBuffer, device::LogicalDevice},
+    VulkanError,
+};
 
 pub mod config;
 pub mod shader;
@@ -53,7 +56,7 @@ where
 impl<V: 'static, P: 'static> PipelineBuilder<V, P>
 where
     V: Vertex,
-    P: UniformBuffer
+    P: UniformBuffer,
 {
     /// Creates a new default [PipelineBuilder]
     pub fn new() -> PipelineBuilder<V, P> {
@@ -98,10 +101,11 @@ where
         }
 
         if TypeId::of::<V>() != TypeId::of::<EmptyVertex>() {
-            let vertex_shader = self.shaders
+            let vertex_shader = self
+                .shaders
                 .iter()
                 .find(|&shader| shader.flags.contains(ShaderStageFlags::VERTEX));
-            
+
             if vertex_shader.is_none() {
                 return Err(PipelineError::MissingShader("Pipeline has a non-empty vertex type, yet no vertex shader was attached to the pipeline".to_string()));
             } else {
@@ -110,7 +114,11 @@ where
         }
 
         if TypeId::of::<P>() != TypeId::of::<EmptyPushConstant>() {
-            let shaders: Vec<&Shader> = self.shaders.iter().filter(|&shader| shader.flags.intersects(P::stage())).collect();
+            let shaders: Vec<&Shader> = self
+                .shaders
+                .iter()
+                .filter(|&shader| shader.flags.intersects(P::stage()))
+                .collect();
 
             // Remove each flag from each shader we have to see if we are missing any shader stages
             // the push constant requires
@@ -228,7 +236,7 @@ where
 pub struct Pipeline<V, P>
 where
     V: Vertex,
-    P: UniformBuffer
+    P: UniformBuffer,
 {
     /// List of the shader modules being used by the [Pipeline]
     _shader_modules: Vec<ShaderModule>,
@@ -245,7 +253,7 @@ where
 impl<V: 'static, P: 'static> Pipeline<V, P>
 where
     V: Vertex,
-    P: UniformBuffer
+    P: UniformBuffer,
 {
     /// Creates a new [PipelineBuilder]
     pub fn builder() -> PipelineBuilder<V, P> {
@@ -256,7 +264,7 @@ where
 impl<V, P> Pipeline<V, P>
 where
     V: Vertex,
-    P: UniformBuffer
+    P: UniformBuffer,
 {
     /// Returns the handle to the Vulkan pipeline
     pub(crate) fn vk_handle(&self) -> vk::Pipeline {
@@ -267,7 +275,7 @@ where
 impl<V, P> Pipeline<V, P>
 where
     V: Vertex,
-    P: UniformBuffer
+    P: UniformBuffer,
 {
     pub fn set_push_constant(&self, command_buffer: &CommandBuffer, data: P) {
         unsafe {
@@ -276,7 +284,20 @@ where
                 self.layout,
                 P::stage().into(),
                 0,
-                data.as_bytes()
+                data.as_bytes(),
+            );
+        };
+    }
+
+    pub fn set_descriptor_sets(&self, command_buffer: &CommandBuffer, sets: &[vk::DescriptorSet]) {
+        unsafe {
+            self.device.vk_handle().cmd_bind_descriptor_sets(
+                command_buffer.vk_handle(),
+                vk::PipelineBindPoint::GRAPHICS,
+                self.layout,
+                0,
+                sets,
+                &[],
             );
         };
     }
@@ -285,7 +306,7 @@ where
 impl<V, P> Drop for Pipeline<V, P>
 where
     V: Vertex,
-    P: UniformBuffer
+    P: UniformBuffer,
 {
     fn drop(&mut self) {
         unsafe {

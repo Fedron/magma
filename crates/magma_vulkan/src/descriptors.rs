@@ -68,16 +68,14 @@ impl<'a> DescriptorBuilder<'a> {
         self
     }
 
-    pub fn build(mut self, device: Rc<LogicalDevice>) -> Result<(), DescriptorBuilderError> {
+    pub fn build(mut self, device: Rc<LogicalDevice>) -> Result<vk::DescriptorSet, DescriptorBuilderError> {
         let layout = self.cache.create_descriptor_layout(
             vk::DescriptorSetLayoutCreateInfo::builder()
                 .bindings(&self.bindings)
                 .build(),
         )?;
 
-        let mut set = vk::DescriptorSet::null();
-        self.allocator.allocate(&mut set, layout)?;
-
+        let set = self.allocator.allocate(layout)?;
         for write in self.writes.iter_mut() {
             write.dst_set = set;
         }
@@ -86,6 +84,6 @@ impl<'a> DescriptorBuilder<'a> {
             device.vk_handle().update_descriptor_sets(&self.writes, &[]);
         };
 
-        Ok(())
+        Ok(set)
     }
 }
