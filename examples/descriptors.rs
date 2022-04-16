@@ -69,7 +69,7 @@ fn main() -> Result<()> {
     // We will create a uniform buffer for each framebuffer so that synchronisation is easier.
     // We don't need to write into the buffers at the moment
     let mut ubo_buffers: Vec<Buffer<Ubo>> = Vec::with_capacity(swapchain.framebuffers().len());
-    for _ in 0..ubo_buffers.len() {
+    for _ in 0..ubo_buffers.capacity() {
         // When we create the buffer we need to make sure it is flagged as a uniform buffer
         //
         // We also set the host visible and host coherent bits so that we can write to the buffer
@@ -84,19 +84,16 @@ fn main() -> Result<()> {
                 1,
                 BufferUsageFlags::UNIFORM_BUFFER,
                 MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
-                logical_device
-                    .physical_device()
-                    .properties()
-                    .limits
-                    .min_uniform_buffer_offset_alignment
+                logical_device.physical_device().properties().limits.min_uniform_buffer_offset_alignment
             )?
         );
     }
+
     let pipeline = Pipeline::<SimpleVertex, EmptyPushConstant>::builder()
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())
-        .build(logical_device.clone())?;
+        .build(logical_device.clone(), &mut descriptor_cache)?;
 
     let mut command_pool = CommandPool::new(
         logical_device.clone(),

@@ -45,6 +45,27 @@ impl Into<vk::DescriptorType> for DescriptorType {
     }
 }
 
+impl From<spirv_reflect::types::descriptor::ReflectDescriptorType> for DescriptorType {
+    fn from(ty: spirv_reflect::types::descriptor::ReflectDescriptorType) -> Self {
+        use spirv_reflect::types::descriptor::ReflectDescriptorType;
+        match ty {
+            ReflectDescriptorType::Undefined => DescriptorType::Sampler,
+            ReflectDescriptorType::Sampler => DescriptorType::Sampler,
+            ReflectDescriptorType::CombinedImageSampler => DescriptorType::CombinedImageSampler,
+            ReflectDescriptorType::SampledImage => DescriptorType::SampledImage,
+            ReflectDescriptorType::StorageImage => DescriptorType::StorageImage,
+            ReflectDescriptorType::UniformTexelBuffer => DescriptorType::UniformTexelBuffer,
+            ReflectDescriptorType::StorageTexelBuffer => DescriptorType::StorageTexelBuffer,
+            ReflectDescriptorType::UniformBuffer => DescriptorType::UniformBuffer,
+            ReflectDescriptorType::StorageBuffer => DescriptorType::StorageBuffer,
+            ReflectDescriptorType::UniformBufferDynamic => DescriptorType::UniformBufferDynamic,
+            ReflectDescriptorType::StorageBufferDynamic => DescriptorType::StorageBufferDynamic,
+            ReflectDescriptorType::InputAttachment => DescriptorType::InputAttachment,
+            ReflectDescriptorType::AccelerationStructureNV => panic!("Unsupported descriptor type")
+        }
+    }
+}
+
 struct PoolSizeMultiplier {
     ty: DescriptorType,
     multiplier: f32,

@@ -12,6 +12,7 @@ use self::{
 };
 use crate::{
     core::{commands::buffer::CommandBuffer, device::LogicalDevice},
+    descriptors::cache::DescriptorLayoutCache,
     VulkanError,
 };
 
@@ -95,7 +96,7 @@ where
     /// - [PipelineError::MissingRenderPass] - You need to provide a render pass for the pipeiline
     /// - [PipelineError::CantCreateLayout] and [PipelineError::CantCreatePipeline] - Failed to
     /// create required Vulkan objects, see the contained [VulkanError] for more information
-    pub fn build(self, device: Rc<LogicalDevice>) -> Result<Pipeline<V, P>, PipelineError> {
+    pub fn build(self, device: Rc<LogicalDevice>, layout_cache: &mut DescriptorLayoutCache) -> Result<Pipeline<V, P>, PipelineError> {
         if self.render_pass.is_none() {
             return Err(PipelineError::MissingRenderPass);
         }
@@ -143,8 +144,10 @@ where
 
         let mut shader_modules: Vec<ShaderModule> = Vec::new();
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = Vec::new();
+        let mut set_layouts: Vec<vk::DescriptorSetLayout> = Vec::new();
         for shader in self.shaders.iter() {
             let shader_module = shader.build(device.clone())?;
+            set_layouts.append(&mut shader.get_descriptor_set_layouts(layout_cache)?);
 
             shader_stages.push(
                 vk::PipelineShaderStageCreateInfo::builder()
@@ -187,7 +190,7 @@ where
 
         let layout_create_info = vk::PipelineLayoutCreateInfo::builder()
             .push_constant_ranges(&push_constant_ranges)
-            .set_layouts(&[]);
+            .set_layouts(&set_layouts);
 
         let layout = unsafe {
             device

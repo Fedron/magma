@@ -5,7 +5,11 @@ use bitflags::bitflags;
 use spirv_reflect::{types::ReflectFormat, ShaderModule as SpirvShader};
 use std::{ffi::CString, fmt::Debug, rc::Rc};
 
-use crate::{core::device::LogicalDevice, VulkanError};
+use crate::{
+    core::device::LogicalDevice,
+    descriptors::{allocator::DescriptorType, cache::{DescriptorCacheError, DescriptorLayoutCache}},
+    VulkanError,
+};
 
 use super::{
     ubo::{UboFieldDescription, UniformBuffer},
@@ -27,6 +31,8 @@ pub enum ShaderError {
     BuildFail(VulkanError),
     #[error("Invalid shader definition: {0}")]
     InvalidDefinition(String),
+    #[error(transparent)]
+    DescriptorCache(#[from] DescriptorCacheError),
 }
 
 bitflags! {
@@ -201,14 +207,24 @@ impl Shader {
             ))
             .map_err(|err| ShaderError::CantParseSpv(err.into()))?;
         if push_constants.len() != 1 {
-            return Err(ShaderError::InvalidDefinition("Shader doesn't define, or defines too many, push constant".to_string()));
+            return Err(ShaderError::InvalidDefinition(
+                "Shader doesn't define, or defines too many, push constant".to_string(),
+            ));
         }
         let push_constant = &push_constants[0];
 
         let mut field_descriptions: Vec<UboFieldDescription> = Vec::new();
         for member in push_constant.members.iter() {
             field_descriptions.push(UboFieldDescription {
-                size: member.type_description.as_ref().unwrap().traits.numeric.vector.component_count as usize * 4
+                size: member
+                    .type_description
+                    .as_ref()
+                    .unwrap()
+                    .traits
+                    .numeric
+                    .vector
+                    .component_count as usize
+                    * 4,
             });
         }
 
@@ -220,7 +236,11 @@ impl Shader {
             )));
         }
 
-        for (index, (field_description, user_field_description)) in field_descriptions.iter().zip(P::get_field_descriptions().iter()).enumerate() {
+        for (index, (field_description, user_field_description)) in field_descriptions
+            .iter()
+            .zip(P::get_field_descriptions().iter())
+            .enumerate()
+        {
             if field_description.size != user_field_description.size {
                 return Err(ShaderError::InvalidDefinition(format!(
                     "Shader contains field with definition: {:#?} but your struct doesn't have a matching field, instead it has {:#?} at the same index {}",
@@ -232,6 +252,46 @@ impl Shader {
         }
 
         Ok(())
+    }
+
+    pub fn get_descriptor_set_layouts(
+        &self,
+        layout_cache: &mut DescriptorLayoutCache,
+    ) -> Result<Vec<vk::DescriptorSetLayout>, ShaderError> {
+        let shader_descriptors = self
+            .reflect
+            .enumerate_descriptor_sets(Some(
+                &self
+                    .entry_point
+                    .to_str()
+                    .expect("Failed to cast CString to str"),
+            ))
+            .map_err(|err| ShaderError::CantParseSpv(err.to_string()))?;
+        let mut descriptor_sets: Vec<vk::DescriptorSetLayout> =
+            Vec::with_capacity(shader_descriptors.len());
+
+        for descriptor_set in shader_descriptors.iter() {
+            let mut bindings: Vec<vk::DescriptorSetLayoutBinding> =
+                Vec::with_capacity(descriptor_set.bindings.len());
+            for binding in descriptor_set.bindings.iter() {
+                bindings.push(
+                    vk::DescriptorSetLayoutBinding::builder()
+                        .binding(binding.binding)
+                        .descriptor_count(1)
+                        .descriptor_type(Into::<DescriptorType>::into(binding.descriptor_type).into())
+                        .stage_flags(self.flags.into())
+                        .build(),
+                );
+            }
+
+            descriptor_sets.push(layout_cache.create_descriptor_layout(
+                vk::DescriptorSetLayoutCreateInfo::builder()
+                    .bindings(&bindings)
+                    .build(),
+            )?);
+        }
+
+        Ok(descriptor_sets)
     }
 }
 
