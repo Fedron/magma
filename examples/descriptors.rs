@@ -1,4 +1,6 @@
-//! Demonstrates how you can use Vulkan descriptors to send data to uniform buffers in your shaders
+//! Demonstrates how you can use Vulkan descriptors to send data to uniform buffers in your
+//! shaders. The end result is the same as the push_constant example but instead descriptors are
+//! used
 
 use std::rc::Rc;
 
@@ -74,7 +76,7 @@ fn main() -> Result<()> {
     // you defined in your shaders
     let descriptor_set_layout = Rc::new(DescriptorSetLayout::new(
         logical_device.clone(),
-        &[DescriptorSetBinding {
+        &[DescriptorSetLayoutBinding {
             binding: 0,
             ty: DescriptorType::UniformBuffer,
             count: 1,
@@ -245,7 +247,7 @@ fn main() -> Result<()> {
         let ubo = ubo_buffers.get_mut(image_index).unwrap();
         ubo.map(u64::MAX, 0)?;
         ubo.write(&[Ubo {
-            offset: [0.25, 0.25],
+            offset: [0.25, -0.25],
             color: [0.5, 0.5, 0.5],
         }]);
 

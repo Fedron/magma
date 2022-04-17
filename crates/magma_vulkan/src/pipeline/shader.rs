@@ -7,7 +7,7 @@ use std::{ffi::CString, fmt::Debug, rc::Rc};
 
 use crate::{
     core::device::LogicalDevice,
-    descriptors::DescriptorType,
+    descriptors::{DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorError},
     VulkanError,
 };
 
@@ -31,6 +31,8 @@ pub enum ShaderError {
     BuildFail(VulkanError),
     #[error("Invalid shader definition: {0}")]
     InvalidDefinition(String),
+    #[error(transparent)]
+    DescriptorError(#[from] DescriptorError),
 }
 
 bitflags! {
@@ -252,9 +254,7 @@ impl Shader {
         Ok(())
     }
 
-    pub fn get_descriptor_set_layouts(
-        &self,
-    ) -> Result<Vec<vk::DescriptorSetLayout>, ShaderError> {
+    pub fn get_descriptor_set_layouts(&self, device: Rc<LogicalDevice>) -> Result<Vec<vk::DescriptorSetLayout>, ShaderError> {
         let shader_descriptors = self
             .reflect
             .enumerate_descriptor_sets(Some(
@@ -268,18 +268,22 @@ impl Shader {
             Vec::with_capacity(shader_descriptors.len());
 
         for descriptor_set in shader_descriptors.iter() {
-            let mut bindings: Vec<vk::DescriptorSetLayoutBinding> =
+            let mut bindings: Vec<DescriptorSetLayoutBinding> =
                 Vec::with_capacity(descriptor_set.bindings.len());
             for binding in descriptor_set.bindings.iter() {
-                bindings.push(
-                    vk::DescriptorSetLayoutBinding::builder()
-                        .binding(binding.binding)
-                        .descriptor_count(1)
-                        // .descriptor_type(Into::<DescriptorType>::into(binding.descriptor_type).into())
-                        .stage_flags(self.flags.into())
-                        .build(),
-                );
+                bindings.push(DescriptorSetLayoutBinding {
+                    binding: binding.binding,
+                    ty: binding.descriptor_type.try_into().map_err(|_| {
+                        ShaderError::InvalidDefinition(
+                            "Shader contains an invalid descriptor type".to_string(),
+                        )
+                    })?,
+                    count: binding.count,
+                    shader_stage_flags: self.flags,
+                });
             }
+
+            descriptor_sets.push(DescriptorSetLayout::new(device.clone(), &bindings)?.vk_handle());
         }
 
         Ok(descriptor_sets)

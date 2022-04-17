@@ -50,15 +50,39 @@ impl Into<vk::DescriptorType> for DescriptorType {
     }
 }
 
+impl TryFrom<spirv_reflect::types::descriptor::ReflectDescriptorType> for DescriptorType {
+    type Error = &'static str;
+
+    fn try_from(
+        value: spirv_reflect::types::descriptor::ReflectDescriptorType,
+    ) -> Result<Self, Self::Error> {
+        use spirv_reflect::types::descriptor::ReflectDescriptorType;
+        match value {
+            ReflectDescriptorType::Sampler => Ok(DescriptorType::Sampler),
+            ReflectDescriptorType::CombinedImageSampler => Ok(DescriptorType::CombinedImageSampler),
+            ReflectDescriptorType::SampledImage => Ok(DescriptorType::SampledImage),
+            ReflectDescriptorType::StorageImage => Ok(DescriptorType::StorageImage),
+            ReflectDescriptorType::UniformTexelBuffer => Ok(DescriptorType::UniformTexelBuffer),
+            ReflectDescriptorType::StorageTexelBuffer => Ok(DescriptorType::StorageTexelBuffer),
+            ReflectDescriptorType::UniformBuffer => Ok(DescriptorType::UniformBuffer),
+            ReflectDescriptorType::StorageBuffer => Ok(DescriptorType::StorageBuffer),
+            ReflectDescriptorType::UniformBufferDynamic => Ok(DescriptorType::UniformBufferDynamic),
+            ReflectDescriptorType::StorageBufferDynamic => Ok(DescriptorType::StorageBufferDynamic),
+            ReflectDescriptorType::InputAttachment => Ok(DescriptorType::InputAttachment),
+            _ => Err("Unsupported descriptor type"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
-pub struct DescriptorSetBinding {
+pub struct DescriptorSetLayoutBinding {
     pub binding: u32,
     pub ty: DescriptorType,
     pub count: u32,
     pub shader_stage_flags: ShaderStageFlags,
 }
 
-impl Into<vk::DescriptorSetLayoutBinding> for DescriptorSetBinding {
+impl Into<vk::DescriptorSetLayoutBinding> for DescriptorSetLayoutBinding {
     fn into(self) -> vk::DescriptorSetLayoutBinding {
         vk::DescriptorSetLayoutBinding::builder()
             .binding(self.binding)
@@ -70,14 +94,14 @@ impl Into<vk::DescriptorSetLayoutBinding> for DescriptorSetBinding {
 }
 
 pub struct DescriptorSetLayout {
-    bindings: Vec<DescriptorSetBinding>,
+    bindings: Vec<DescriptorSetLayoutBinding>,
     handle: vk::DescriptorSetLayout,
 }
 
 impl DescriptorSetLayout {
     pub fn new(
         device: Rc<LogicalDevice>,
-        bindings: &[DescriptorSetBinding],
+        bindings: &[DescriptorSetLayoutBinding],
     ) -> Result<DescriptorSetLayout, DescriptorError> {
         let vk_bindings: Vec<vk::DescriptorSetLayoutBinding> =
             bindings.iter().map(|&binding| binding.into()).collect();

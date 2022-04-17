@@ -147,7 +147,7 @@ where
         let mut set_layouts: Vec<vk::DescriptorSetLayout> = Vec::new();
         for shader in self.shaders.iter() {
             let shader_module = shader.build(device.clone())?;
-            set_layouts.append(&mut shader.get_descriptor_set_layouts()?);
+            set_layouts.append(&mut shader.get_descriptor_set_layouts(device.clone())?);
 
             shader_stages.push(
                 vk::PipelineShaderStageCreateInfo::builder()

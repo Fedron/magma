@@ -143,7 +143,7 @@ pub mod prelude {
     pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 
     pub use crate::descriptors::{
-        DescriptorError, DescriptorPool, DescriptorSetBinding, DescriptorSetLayout, DescriptorType,
+        DescriptorError, DescriptorPool, DescriptorSetLayoutBinding, DescriptorSetLayout, DescriptorType,
         DescriptorWriter,
     };
 
