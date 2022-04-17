@@ -87,7 +87,6 @@ fn main() -> Result<()> {
         logical_device.clone(),
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
-        1
     )?;
     staging_buffer.map(u64::MAX, 0)?;
     staging_buffer.write(&[
@@ -113,7 +112,6 @@ fn main() -> Result<()> {
         logical_device.clone(),
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
-        1,
     )?;
     vertex_buffer.copy_from(&staging_buffer, &command_pool)?;
 
@@ -121,7 +119,6 @@ fn main() -> Result<()> {
         logical_device.clone(),
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
-        1
     )?;
     staging_buffer.map(u64::MAX, 0)?;
     staging_buffer.write(&[0, 3, 1, 1, 3, 2]);
@@ -130,7 +127,6 @@ fn main() -> Result<()> {
         logical_device.clone(),
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::INDEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
-        1,
     )?;
     index_buffer.copy_from(&staging_buffer, &command_pool)?;
 

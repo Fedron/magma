@@ -75,14 +75,17 @@ pub struct Buffer<T, const CAPACITY: usize> {
 
 impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
     /// Creates a new [`Buffer`]
-    ///
-    /// TODO: Remove `min_offset_alignment` as a parameter and set it automatically
     pub fn new(
         device: Rc<LogicalDevice>,
         usage: BufferUsageFlags,
         memory_properties: MemoryPropertyFlags,
-        min_offset_alignment: u64,
     ) -> Result<Buffer<T, CAPACITY>, BufferError> {
+        let min_offset_alignment = if usage.contains(BufferUsageFlags::UNIFORM_BUFFER) {
+            device.physical_device().properties().limits.min_uniform_buffer_offset_alignment
+        } else {
+            1
+        };
+
         let instance_size = std::mem::size_of::<T>();
         let alignment_size = (instance_size + min_offset_alignment as usize - 1)
             & !(min_offset_alignment as usize - 1);
