@@ -94,13 +94,48 @@ fn get_field_size(field: &syn::Field) -> usize {
     let field_name = &field.ident.as_ref().unwrap();
     match &field.ty {
         syn::Type::Path(ref path) => {
-            let ty = format!("{}", path.path.get_ident().unwrap());
-            let ty = ty.as_str();
-            match ty {
-                "u32" => ::std::mem::size_of::<u32>(),
-                _ => panic!("Type `{}` on field `{}` is not supported", ty, field_name)
+            if path.path.segments.len() == 2 {
+                if path
+                    .path
+                    .segments
+                    .first()
+                    .unwrap()
+                    .ident
+                    .to_string()
+                    .as_str()
+                    == "glam"
+                {
+                    let ty = path.path.segments[1].ident.to_string();
+                    let ty = ty.as_str();
+                    match ty {
+                        "Vec2" => 8,
+                        "Vec3" => 12,
+                        "Vec4" => 16,
+                        "Mat2" => 16,
+                        "Mat3" => 36,
+                        "Mat4" => 64,
+                        _ => panic!("Field `{}` has unsupported glam type `{}`", field_name, ty)
+                    }
+                } else {
+                    panic!(
+                        "Field `{}` has a type with 2 path segments but only types from glam are supported (e.g. glam::Vec3)",
+                        field_name
+                    );
+                }
+            } else if path.path.segments.len() == 1 {
+                let ty = format!("{}", path.path.get_ident().unwrap());
+                let ty = ty.as_str();
+                match ty {
+                    "u32" => ::std::mem::size_of::<u32>(),
+                    _ => panic!("Type `{}` on field `{}` is not supported", ty, field_name),
+                }
+            } else {
+                panic!(
+                    "Field `{}` has a type with more than 2 path segments, only built-in types like `[f32; 3]` or glam types like `glam::Vec3` are supported",
+                    field_name
+                );
             }
-        },
+        }
         syn::Type::Array(array) => {
             let array_type = match &*array.elem {
                 syn::Type::Path(path) => path
@@ -111,12 +146,18 @@ fn get_field_size(field: &syn::Field) -> usize {
                 _ => panic!("Failed to read array type on field `{}`", field_name),
             };
 
-            let array_len  = match &array.len {
+            let array_len = match &array.len {
                 syn::Expr::Lit(lit) => match &lit.lit {
                     syn::Lit::Int(i) => i.base10_parse::<u32>().unwrap(),
-                    _ => panic!("Field `{}` has unexpected literal in array type", field_name)
+                    _ => panic!(
+                        "Field `{}` has unexpected literal in array type",
+                        field_name
+                    ),
                 },
-                _ => panic!("Field `{}` has unexpected literal in array type", field_name)
+                _ => panic!(
+                    "Field `{}` has unexpected literal in array type",
+                    field_name
+                ),
             };
 
             if array_type.ne("f32") {
@@ -124,8 +165,8 @@ fn get_field_size(field: &syn::Field) -> usize {
             }
 
             (4 * array_len) as usize
-        },
-        _ => panic!("Field `{}` has unsupported type", field_name)
+        }
+        _ => panic!("Field `{}` has unsupported type", field_name),
     }
 }
 

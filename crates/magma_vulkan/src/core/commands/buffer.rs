@@ -334,6 +334,7 @@ impl CommandBuffer {
         first_vertex: u32,
         first_instance: u32,
     ) {
+        // TODO: check how many vertices/indices were bound and draw that many vertices
         unsafe {
             self.device.vk_handle().cmd_draw(
                 self.handle,

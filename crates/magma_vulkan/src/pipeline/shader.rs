@@ -216,15 +216,7 @@ impl Shader {
         let mut field_descriptions: Vec<UboFieldDescription> = Vec::new();
         for member in push_constant.members.iter() {
             field_descriptions.push(UboFieldDescription {
-                size: member
-                    .type_description
-                    .as_ref()
-                    .unwrap()
-                    .traits
-                    .numeric
-                    .vector
-                    .component_count as usize
-                    * 4,
+                size: member.size as usize,
             });
         }
 

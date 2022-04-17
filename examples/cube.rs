@@ -26,7 +26,7 @@ struct CubeVertex {
 #[derive(UniformBuffer)]
 #[ubo(stage = "vertex")]
 struct PushConstant {
-    transform_matrix: glam::Mat4,
+    _transform_matrix: glam::Mat4,
 }
 
 // Wraps a projection and view matrix which will allow us to see the cube with perspective in 3D
@@ -120,7 +120,7 @@ fn main() -> Result<()> {
 
     let mut staging_buffer = Buffer::<CubeVertex>::new(
         logical_device.clone(),
-        4,
+        8,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1,
@@ -171,7 +171,7 @@ fn main() -> Result<()> {
 
     let mut vertex_buffer = Buffer::<CubeVertex>::new(
         logical_device.clone(),
-        4,
+        8,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
@@ -180,7 +180,7 @@ fn main() -> Result<()> {
 
     let mut staging_buffer = Buffer::<u32>::new(
         logical_device.clone(),
-        6,
+        36,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1,
@@ -197,7 +197,7 @@ fn main() -> Result<()> {
 
     let mut index_buffer = Buffer::<u32>::new(
         logical_device.clone(),
-        6,
+        36,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::INDEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
@@ -231,8 +231,10 @@ fn main() -> Result<()> {
             _ => {}
         });
 
-        camera.look_at(glam::vec3(-2.0, 0.0, 0.0), glam::Vec3::ZERO);
-        cube_transform.rotation.x += 0.001;
+        camera.look_at(glam::vec3(-3.0, 0.0, 0.0), glam::Vec3::ZERO);
+        cube_transform.rotation.x += 0.0001;
+        cube_transform.rotation.y += 0.0002;
+        cube_transform.rotation.z += 0.0003;
 
         if is_minimized {
             continue;
@@ -270,13 +272,13 @@ fn main() -> Result<()> {
         pipeline.set_push_constant(
             &command_buffer,
             PushConstant {
-                transform_matrix: camera.projection_matrix
+                _transform_matrix: camera.projection_matrix
                     * camera.view_matrix
                     * cube_transform.as_matrix(),
             },
         );
 
-        command_buffer.draw_indexed(6, 1, 0, 0, 0);
+        command_buffer.draw_indexed(36, 1, 0, 0, 0);
 
         command_buffer.end_render_pass();
         command_buffer.end()?;
