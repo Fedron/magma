@@ -146,14 +146,14 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
 
     /// Returns a corresponding descriptor buffer info if the buffer has been marked with a
     /// `BufferUsageFlag` that can be used in a descriptor set.
-    ///
-    /// FIXME: Return an Option<vk::DescriptorBufferInfo> as only buffer's with appropriate buffer
-    /// usage flags should be able to return a descriptor buffer info
-    pub fn descriptor(&self) -> vk::DescriptorBufferInfo {
-        vk::DescriptorBufferInfo {
+    pub fn descriptor(&self) -> Option<vk::DescriptorBufferInfo> {
+        if self.usage.contains(BufferUsageFlags::UNIFORM_BUFFER) {
+        Some(vk::DescriptorBufferInfo {
             buffer: self.handle,
             offset: 0,
             range: vk::WHOLE_SIZE,
+        }) } else {
+            None
         }
     }
 

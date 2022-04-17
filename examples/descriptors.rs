@@ -105,9 +105,13 @@ fn main() -> Result<()> {
 
     let mut descriptor_sets = Vec::with_capacity(ubo_buffers.len());
     for i in 0..ubo_buffers.len() {
+        // In order for a buffer to be able to write to a desriptor set in needs an appropriate
+        // usage flag (UNIFORM_BUFFER in this case) set, we can get the buffer's descriptor buffer
+        // info using `.descriptor()` but it will only return descriptor buffer info if the buffer
+        // usage flags support it
         descriptor_sets.push(
             DescriptorWriter::new(descriptor_set_layout.clone(), descriptor_pool.clone())
-                .write_buffer(0, ubo_buffers[i].descriptor())
+                .write_buffer(0, ubo_buffers[i].descriptor().unwrap())
                 .write()?
         );
     }
