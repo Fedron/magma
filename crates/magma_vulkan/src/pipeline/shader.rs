@@ -7,7 +7,7 @@ use std::{ffi::CString, fmt::Debug, rc::Rc};
 
 use crate::{
     core::device::LogicalDevice,
-    descriptors::{allocator::DescriptorType, cache::{DescriptorCacheError, DescriptorLayoutCache}},
+    descriptors::DescriptorType,
     VulkanError,
 };
 
@@ -31,8 +31,6 @@ pub enum ShaderError {
     BuildFail(VulkanError),
     #[error("Invalid shader definition: {0}")]
     InvalidDefinition(String),
-    #[error(transparent)]
-    DescriptorCache(#[from] DescriptorCacheError),
 }
 
 bitflags! {
@@ -256,7 +254,6 @@ impl Shader {
 
     pub fn get_descriptor_set_layouts(
         &self,
-        layout_cache: &mut DescriptorLayoutCache,
     ) -> Result<Vec<vk::DescriptorSetLayout>, ShaderError> {
         let shader_descriptors = self
             .reflect
@@ -278,17 +275,11 @@ impl Shader {
                     vk::DescriptorSetLayoutBinding::builder()
                         .binding(binding.binding)
                         .descriptor_count(1)
-                        .descriptor_type(Into::<DescriptorType>::into(binding.descriptor_type).into())
+                        // .descriptor_type(Into::<DescriptorType>::into(binding.descriptor_type).into())
                         .stage_flags(self.flags.into())
                         .build(),
                 );
             }
-
-            descriptor_sets.push(layout_cache.create_descriptor_layout(
-                vk::DescriptorSetLayoutCreateInfo::builder()
-                    .bindings(&bindings)
-                    .build(),
-            )?);
         }
 
         Ok(descriptor_sets)

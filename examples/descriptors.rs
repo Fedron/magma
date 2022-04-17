@@ -62,9 +62,25 @@ fn main() -> Result<()> {
     let vertex_shader = Shader::new("shaders/descriptors.vert")?;
     let fragment_shader = Shader::new("shaders/descriptors.frag")?;
 
-    // To start using descriptors we need to create a cache and allocator
-    let mut descriptor_cache = DescriptorLayoutCache::new(logical_device.clone());
-    let mut descriptor_allocator = DescriptorAllocator::new(logical_device.clone());
+    // We first need to create a descriptor pool from which we will allocate sets
+    let descriptor_pool = Rc::new(
+        DescriptorPool::builder()
+            .add_pool_size(DescriptorType::UniformBuffer, swapchain.framebuffers().len() as u32)
+            .max_sets(swapchain.framebuffers().len() as u32)
+            .build(logical_device.clone())?
+    );
+
+    // We need to define the descriptor set layout, which should match the the descriptor layout
+    // you defined in your shaders
+    let descriptor_set_layout = Rc::new(DescriptorSetLayout::new(
+        logical_device.clone(),
+        &[DescriptorSetBinding {
+            binding: 0,
+            ty: DescriptorType::UniformBuffer,
+            count: 1,
+            shader_stage_flags: ShaderStageFlags::VERTEX,
+        }],
+    )?);
 
     // We will create a uniform buffer for each framebuffer so that synchronisation is easier.
     // We don't need to write into the buffers at the moment
@@ -78,14 +94,25 @@ fn main() -> Result<()> {
         //
         // Lastly we need the min offset alignment of the buffer to match that of the physical
         // device
-        ubo_buffers.push(
-            Buffer::<Ubo>::new(
-                logical_device.clone(),
-                1,
-                BufferUsageFlags::UNIFORM_BUFFER,
-                MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
-                logical_device.physical_device().properties().limits.min_uniform_buffer_offset_alignment
-            )?
+        ubo_buffers.push(Buffer::<Ubo>::new(
+            logical_device.clone(),
+            1,
+            BufferUsageFlags::UNIFORM_BUFFER,
+            MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
+            logical_device
+                .physical_device()
+                .properties()
+                .limits
+                .min_uniform_buffer_offset_alignment,
+        )?);
+    }
+
+    let mut descriptor_sets = Vec::with_capacity(ubo_buffers.len());
+    for i in 0..ubo_buffers.len() {
+        descriptor_sets.push(
+            DescriptorWriter::new(descriptor_set_layout.clone(), descriptor_pool.clone())
+                .write_buffer(0, ubo_buffers[i].descriptor())
+                .write()?
         );
     }
 
@@ -93,7 +120,7 @@ fn main() -> Result<()> {
         .attach_shader(vertex_shader)
         .attach_shader(fragment_shader)
         .render_pass(swapchain.render_pass())
-        .build(logical_device.clone(), &mut descriptor_cache)?;
+        .build(logical_device.clone())?;
 
     let mut command_pool = CommandPool::new(
         logical_device.clone(),
@@ -222,12 +249,9 @@ fn main() -> Result<()> {
             color: [0.5, 0.5, 0.5],
         }]);
 
-        // We then need to write to the descriptor
-        let set = DescriptorBuilder::new(&mut descriptor_cache, &mut descriptor_allocator)
-            .bind_buffer(0, ubo.descriptor(), DescriptorType::UniformBuffer, ShaderStageFlags::VERTEX)
-            .build(logical_device.clone())?;
-        // And lastly we can bind the descriptor set
-        pipeline.set_descriptor_sets(&command_buffer, &[set]);
+        // Lastly, we need to set the descriptor set on the pipeline so that the shader recieves
+        // the ubo
+        pipeline.set_descriptor_sets(&command_buffer, &[descriptor_sets[image_index]]);
 
         command_buffer.draw_indexed(6, 1, 0, 0, 0);
 

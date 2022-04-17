@@ -2,12 +2,12 @@
 
 extern crate log;
 
+mod buffer;
 mod core;
+mod descriptors;
 mod pipeline;
 mod sync;
 mod utils;
-mod buffer;
-mod descriptors;
 
 use ash::vk::Result as VkResult;
 
@@ -131,9 +131,9 @@ impl From<VkResult> for VulkanError {
 pub mod prelude {
     pub use crate::buffer::{Buffer, BufferUsageFlags, MemoryPropertyFlags};
 
-    pub use crate::core::debugger::DebugLayer;
     pub use crate::core::commands::buffer::{CommandBuffer, CommandBufferLevel};
     pub use crate::core::commands::pool::{CommandPool, CommandPoolError};
+    pub use crate::core::debugger::DebugLayer;
     pub use crate::core::device::{
         DeviceExtension, LogicalDevice, LogicalDeviceError, PhysicalDevice, PhysicalDeviceBuilder,
         PhysicalDeviceError, PhysicalDeviceType, Queue, QueueFamily,
@@ -142,13 +142,17 @@ pub mod prelude {
     pub use crate::core::surface::{Surface, SurfaceError};
     pub use crate::core::swapchain::{ColorFormat, PresentMode, Swapchain, SwapchainError};
 
-    pub use crate::descriptors::{DescriptorBuilder, DescriptorBuilderError};
-    pub use crate::descriptors::allocator::{DescriptorAllocator, DescriptorAllocatorError, DescriptorType};
-    pub use crate::descriptors::cache::{DescriptorLayoutCache, DescriptorCacheError};
+    pub use crate::descriptors::{
+        DescriptorError, DescriptorPool, DescriptorSetBinding, DescriptorSetLayout, DescriptorType,
+        DescriptorWriter,
+    };
 
     pub use crate::pipeline::shader::{Shader, ShaderError, ShaderStageFlags};
-    pub use crate::pipeline::ubo::{UboFieldDescription, UniformBuffer, EmptyPushConstant};
-    pub use crate::pipeline::vertex::{EmptyVertex, Vertex, VertexInputRate, VertexAttributeDescription, VertexBindingDescription, VkFormat};
+    pub use crate::pipeline::ubo::{EmptyPushConstant, UboFieldDescription, UniformBuffer};
+    pub use crate::pipeline::vertex::{
+        EmptyVertex, Vertex, VertexAttributeDescription, VertexBindingDescription, VertexInputRate,
+        VkFormat,
+    };
     pub use crate::pipeline::{Pipeline, PipelineBuilder, PipelineError};
 
     pub use crate::sync::{Fence, Semaphore};
