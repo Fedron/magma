@@ -71,9 +71,8 @@ fn main() -> Result<()> {
         CommandBufferLevel::Primary,
     )?;
 
-    let mut staging_buffer = Buffer::<SimpleVertex>::new(
+    let mut staging_buffer = Buffer::<SimpleVertex, 4>::new(
         logical_device.clone(),
-        4,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1
@@ -98,9 +97,8 @@ fn main() -> Result<()> {
         },
     ]);
 
-    let mut vertex_buffer = Buffer::<SimpleVertex>::new(
+    let mut vertex_buffer = Buffer::<SimpleVertex, 4>::new(
         logical_device.clone(),
-        4,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
@@ -109,9 +107,8 @@ fn main() -> Result<()> {
 
     // In the same way that we upload our vertices to vertex buffer through a staging buffer we
     // will upload our Indices
-    let mut staging_buffer = Buffer::<u32>::new(
+    let mut staging_buffer = Buffer::<u32, 6>::new(
         logical_device.clone(),
-        6,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1
@@ -121,9 +118,8 @@ fn main() -> Result<()> {
 
     // Since this buffer will be used as an index buffer we need to mark it as such using the
     // INDEX_BUFFER buffer usage flag
-    let mut index_buffer = Buffer::<u32>::new(
+    let mut index_buffer = Buffer::<u32, 6>::new(
         logical_device.clone(),
-        6,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::INDEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,

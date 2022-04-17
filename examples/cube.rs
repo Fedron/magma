@@ -118,9 +118,8 @@ fn main() -> Result<()> {
         CommandBufferLevel::Primary,
     )?;
 
-    let mut staging_buffer = Buffer::<CubeVertex>::new(
+    let mut staging_buffer = Buffer::<CubeVertex, 8>::new(
         logical_device.clone(),
-        8,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1,
@@ -169,18 +168,16 @@ fn main() -> Result<()> {
         },
     ]);
 
-    let mut vertex_buffer = Buffer::<CubeVertex>::new(
+    let mut vertex_buffer = Buffer::<CubeVertex, 8>::new(
         logical_device.clone(),
-        8,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
     )?;
     vertex_buffer.copy_from(&staging_buffer, &command_pool)?;
 
-    let mut staging_buffer = Buffer::<u32>::new(
+    let mut staging_buffer = Buffer::<u32, 36>::new(
         logical_device.clone(),
-        36,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1,
@@ -195,9 +192,8 @@ fn main() -> Result<()> {
         1, 3, 2, 1, 0, 3, // Bottom face
     ]);
 
-    let mut index_buffer = Buffer::<u32>::new(
+    let mut index_buffer = Buffer::<u32, 36>::new(
         logical_device.clone(),
-        36,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::INDEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
@@ -232,9 +228,9 @@ fn main() -> Result<()> {
         });
 
         camera.look_at(glam::vec3(-3.0, 0.0, 0.0), glam::Vec3::ZERO);
-        cube_transform.rotation.x += 0.0001;
-        cube_transform.rotation.y += 0.0002;
-        cube_transform.rotation.z += 0.0003;
+        cube_transform.rotation.x += 0.001;
+        cube_transform.rotation.y += 0.002;
+        cube_transform.rotation.z += 0.003;
 
         if is_minimized {
             continue;

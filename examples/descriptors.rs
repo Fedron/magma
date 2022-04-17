@@ -28,8 +28,8 @@ struct SimpleVertex {
 #[derive(UniformBuffer)]
 #[ubo(stage = "vertex")]
 struct Ubo {
-    offset: [f32; 2],
-    color: [f32; 3],
+    _offset: [f32; 2],
+    _color: [f32; 3],
 }
 
 fn main() -> Result<()> {
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
 
     // We will create a uniform buffer for each framebuffer so that synchronisation is easier.
     // We don't need to write into the buffers at the moment
-    let mut ubo_buffers: Vec<Buffer<Ubo>> = Vec::with_capacity(swapchain.framebuffers().len());
+    let mut ubo_buffers: Vec<Buffer<Ubo, 1>> = Vec::with_capacity(swapchain.framebuffers().len());
     for _ in 0..ubo_buffers.capacity() {
         // When we create the buffer we need to make sure it is flagged as a uniform buffer
         //
@@ -96,9 +96,8 @@ fn main() -> Result<()> {
         //
         // Lastly we need the min offset alignment of the buffer to match that of the physical
         // device
-        ubo_buffers.push(Buffer::<Ubo>::new(
+        ubo_buffers.push(Buffer::new(
             logical_device.clone(),
-            1,
             BufferUsageFlags::UNIFORM_BUFFER,
             MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
             logical_device
@@ -136,9 +135,8 @@ fn main() -> Result<()> {
         CommandBufferLevel::Primary,
     )?;
 
-    let mut staging_buffer = Buffer::<SimpleVertex>::new(
+    let mut staging_buffer = Buffer::<SimpleVertex, 4>::new(
         logical_device.clone(),
-        4,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1,
@@ -163,18 +161,16 @@ fn main() -> Result<()> {
         },
     ]);
 
-    let mut vertex_buffer = Buffer::<SimpleVertex>::new(
+    let mut vertex_buffer = Buffer::<SimpleVertex, 4>::new(
         logical_device.clone(),
-        4,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
     )?;
     vertex_buffer.copy_from(&staging_buffer, &command_pool)?;
 
-    let mut staging_buffer = Buffer::<u32>::new(
+    let mut staging_buffer = Buffer::<u32, 6>::new(
         logical_device.clone(),
-        6,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1,
@@ -182,9 +178,8 @@ fn main() -> Result<()> {
     staging_buffer.map(u64::MAX, 0)?;
     staging_buffer.write(&[0, 3, 1, 1, 3, 2]);
 
-    let mut index_buffer = Buffer::<u32>::new(
+    let mut index_buffer = Buffer::<u32, 6>::new(
         logical_device.clone(),
-        6,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::INDEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
@@ -247,8 +242,8 @@ fn main() -> Result<()> {
         let ubo = ubo_buffers.get_mut(image_index).unwrap();
         ubo.map(u64::MAX, 0)?;
         ubo.write(&[Ubo {
-            offset: [0.25, -0.25],
-            color: [0.5, 0.5, 0.5],
+            _offset: [0.25, -0.25],
+            _color: [0.5, 0.5, 0.5],
         }]);
 
         // Lastly, we need to set the descriptor set on the pipeline so that the shader recieves

@@ -83,9 +83,8 @@ fn main() -> Result<()> {
         CommandBufferLevel::Primary,
     )?;
 
-    let mut staging_buffer = Buffer::<SimpleVertex>::new(
+    let mut staging_buffer = Buffer::<SimpleVertex, 4>::new(
         logical_device.clone(),
-        4,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1
@@ -110,18 +109,16 @@ fn main() -> Result<()> {
         },
     ]);
 
-    let mut vertex_buffer = Buffer::<SimpleVertex>::new(
+    let mut vertex_buffer = Buffer::<SimpleVertex, 4>::new(
         logical_device.clone(),
-        4,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,
     )?;
     vertex_buffer.copy_from(&staging_buffer, &command_pool)?;
 
-    let mut staging_buffer = Buffer::<u32>::new(
+    let mut staging_buffer = Buffer::<u32, 6>::new(
         logical_device.clone(),
-        6,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1
@@ -129,9 +126,8 @@ fn main() -> Result<()> {
     staging_buffer.map(u64::MAX, 0)?;
     staging_buffer.write(&[0, 3, 1, 1, 3, 2]);
 
-    let mut index_buffer = Buffer::<u32>::new(
+    let mut index_buffer = Buffer::<u32, 6>::new(
         logical_device.clone(),
-        6,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::INDEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,

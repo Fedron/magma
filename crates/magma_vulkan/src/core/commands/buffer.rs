@@ -303,7 +303,7 @@ impl CommandBuffer {
     }
 
     // TODO: check buffer has the VERTEX_BUFFER usage flag
-    pub fn bind_vertex_buffer<T>(&mut self, buffer: &Buffer<T>) {
+    pub fn bind_vertex_buffer<T, const CAPACITY: usize>(&mut self, buffer: &Buffer<T, CAPACITY>) {
         let buffers = [buffer.vk_handle()];
         let offsets = [0];
 
@@ -315,7 +315,7 @@ impl CommandBuffer {
     }
 
     // TODO: check buffer has the INDEX_BUFFER usage flag
-    pub fn bind_index_buffer(&mut self, buffer: &Buffer<u32>) {
+    pub fn bind_index_buffer<const CAPACITY: usize>(&mut self, buffer: &Buffer<u32, CAPACITY>) {
         unsafe {
             self.device.vk_handle().cmd_bind_index_buffer(
                 self.handle,

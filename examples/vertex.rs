@@ -80,9 +80,8 @@ fn main() -> Result<()> {
     // We could also just store the vertices in a buffer that is both visible to the host and
     // device but this can start to introduce performance penalties than if you used a device local
     // buffer.
-    let mut staging_buffer = Buffer::<SimpleVertex>::new(
+    let mut staging_buffer = Buffer::<SimpleVertex, 3>::new(
         logical_device.clone(),
-        3,
         BufferUsageFlags::TRANSFER_SRC,
         MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
         1
@@ -111,9 +110,8 @@ fn main() -> Result<()> {
     //
     // Since we are going to use this buffer as a vertex buffer we need to mark it as such using
     // the VERTEX_BUFFER buffer usage flag
-    let mut vertex_buffer = Buffer::<SimpleVertex>::new(
+    let mut vertex_buffer = Buffer::<SimpleVertex, 3>::new(
         logical_device.clone(),
-        3,
         BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::VERTEX_BUFFER,
         MemoryPropertyFlags::DEVICE_LOCAL,
         1,

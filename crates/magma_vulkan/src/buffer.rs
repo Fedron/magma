@@ -51,10 +51,9 @@ impl Into<vk::MemoryPropertyFlags> for MemoryPropertyFlags {
     }
 }
 
-pub struct Buffer<T> {
+pub struct Buffer<T, const CAPACITY: usize> {
     mapped: Option<*mut T>,
     usage: BufferUsageFlags,
-    instance_count: u64,
     size: usize,
 
     handle: vk::Buffer,
@@ -62,18 +61,17 @@ pub struct Buffer<T> {
     device: Rc<LogicalDevice>,
 }
 
-impl<T> Buffer<T> {
+impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
     pub fn new(
         device: Rc<LogicalDevice>,
-        instance_count: usize,
         usage: BufferUsageFlags,
         memory_properties: MemoryPropertyFlags,
         min_offset_alignment: u64,
-    ) -> Result<Buffer<T>, BufferError> {
+    ) -> Result<Buffer<T, CAPACITY>, BufferError> {
         let instance_size = std::mem::size_of::<T>();
         let alignment_size = (instance_size + min_offset_alignment as usize - 1)
             & !(min_offset_alignment as usize - 1);
-        let buffer_size = alignment_size * instance_count;
+        let buffer_size = alignment_size * CAPACITY;
 
         let create_info = vk::BufferCreateInfo::builder()
             .size(buffer_size as u64)
@@ -113,7 +111,6 @@ impl<T> Buffer<T> {
         Ok(Buffer {
             mapped: None,
             usage,
-            instance_count: instance_count as u64,
             size: buffer_size,
 
             handle,
@@ -123,9 +120,9 @@ impl<T> Buffer<T> {
     }
 }
 
-impl<T> Buffer<T> {
-    pub fn len(&self) -> usize {
-        self.instance_count as usize
+impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
+    pub fn capacity(&self) -> usize {
+        CAPACITY 
     }
 
     pub fn descriptor(&self) -> vk::DescriptorBufferInfo {
@@ -141,7 +138,7 @@ impl<T> Buffer<T> {
     }
 }
 
-impl<T> Buffer<T> {
+impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
     pub fn map(&mut self, size: u64, offset: u64) -> Result<(), BufferError> {
         self.mapped = Some(unsafe {
             self.device
@@ -163,11 +160,10 @@ impl<T> Buffer<T> {
         }
     }
 
-    // TODO: Check we are writing `instance_count` number of items from `data`
-    pub fn write(&mut self, data: &[T]) {
+    pub fn write(&mut self, data: &[T; CAPACITY]) {
         if let Some(mapped) = self.mapped {
             unsafe {
-                mapped.copy_from_nonoverlapping(data.as_ptr(), self.instance_count as usize);
+                mapped.copy_from_nonoverlapping(data.as_ptr(), CAPACITY);
             };
             self.unmap();
         }
@@ -175,7 +171,7 @@ impl<T> Buffer<T> {
 
     pub fn copy_from(
         &mut self,
-        buffer: &Buffer<T>,
+        buffer: &Buffer<T, CAPACITY>,
         command_pool: &CommandPool,
     ) -> Result<(), BufferError> {
         if !self.usage.contains(BufferUsageFlags::TRANSFER_DST) {
@@ -261,7 +257,7 @@ impl<T> Buffer<T> {
     }
 }
 
-impl<T> Drop for Buffer<T> {
+impl<T, const CAPACITY: usize> Drop for Buffer<T, CAPACITY> {
     fn drop(&mut self) {
         self.unmap();
         unsafe {
