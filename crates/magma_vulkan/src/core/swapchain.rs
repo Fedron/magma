@@ -587,6 +587,10 @@ impl Swapchain {
         (self.extent.width, self.extent.height)
     }
 
+    pub fn aspect_ratio(&self) -> f32 {
+        self.extent.width as f32 / self.extent.height as f32
+    }
+
     /// Returns the main render pass of the swapchain.
     ///
     /// The render pass consists of a color and depth stencil attachment
