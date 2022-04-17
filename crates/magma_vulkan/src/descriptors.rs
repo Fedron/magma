@@ -96,6 +96,7 @@ impl Into<vk::DescriptorSetLayoutBinding> for DescriptorSetLayoutBinding {
 pub struct DescriptorSetLayout {
     bindings: Vec<DescriptorSetLayoutBinding>,
     handle: vk::DescriptorSetLayout,
+    device: Rc<LogicalDevice>,
 }
 
 impl DescriptorSetLayout {
@@ -120,6 +121,7 @@ impl DescriptorSetLayout {
         Ok(DescriptorSetLayout {
             bindings: bindings.to_vec(),
             handle,
+            device,
         })
     }
 }
@@ -127,6 +129,14 @@ impl DescriptorSetLayout {
 impl DescriptorSetLayout {
     pub(crate) fn vk_handle(&self) -> vk::DescriptorSetLayout {
         self.handle
+    }
+}
+
+impl Drop for DescriptorSetLayout {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.vk_handle().destroy_descriptor_set_layout(self.handle, None);
+        };
     }
 }
 

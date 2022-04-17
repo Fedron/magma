@@ -7,7 +7,7 @@ use std::{ffi::CString, fmt::Debug, rc::Rc};
 
 use crate::{
     core::device::LogicalDevice,
-    descriptors::{DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorError},
+    descriptors::{DescriptorError, DescriptorSetLayout, DescriptorSetLayoutBinding},
     VulkanError,
 };
 
@@ -254,7 +254,10 @@ impl Shader {
         Ok(())
     }
 
-    pub fn get_descriptor_set_layouts(&self, device: Rc<LogicalDevice>) -> Result<Vec<vk::DescriptorSetLayout>, ShaderError> {
+    pub fn get_descriptor_set_layouts(
+        &self,
+        device: Rc<LogicalDevice>,
+    ) -> Result<Vec<DescriptorSetLayout>, ShaderError> {
         let shader_descriptors = self
             .reflect
             .enumerate_descriptor_sets(Some(
@@ -264,7 +267,7 @@ impl Shader {
                     .expect("Failed to cast CString to str"),
             ))
             .map_err(|err| ShaderError::CantParseSpv(err.to_string()))?;
-        let mut descriptor_sets: Vec<vk::DescriptorSetLayout> =
+        let mut descriptor_sets: Vec<DescriptorSetLayout> =
             Vec::with_capacity(shader_descriptors.len());
 
         for descriptor_set in shader_descriptors.iter() {
@@ -283,7 +286,7 @@ impl Shader {
                 });
             }
 
-            descriptor_sets.push(DescriptorSetLayout::new(device.clone(), &bindings)?.vk_handle());
+            descriptor_sets.push(DescriptorSetLayout::new(device.clone(), &bindings)?);
         }
 
         Ok(descriptor_sets)

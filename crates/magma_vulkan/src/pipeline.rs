@@ -144,7 +144,7 @@ where
 
         let mut shader_modules: Vec<ShaderModule> = Vec::new();
         let mut shader_stages: Vec<vk::PipelineShaderStageCreateInfo> = Vec::new();
-        let mut set_layouts: Vec<vk::DescriptorSetLayout> = Vec::new();
+        let mut set_layouts: Vec<DescriptorSetLayout> = Vec::new();
         for shader in self.shaders.iter() {
             let shader_module = shader.build(device.clone())?;
             set_layouts.append(&mut shader.get_descriptor_set_layouts(device.clone())?);
@@ -188,9 +188,14 @@ where
             );
         }
 
+        let vk_set_layouts: Vec<vk::DescriptorSetLayout> = set_layouts
+            .iter()
+            .map(|layout| layout.vk_handle())
+            .collect();
+
         let layout_create_info = vk::PipelineLayoutCreateInfo::builder()
             .push_constant_ranges(&push_constant_ranges)
-            .set_layouts(&set_layouts);
+            .set_layouts(&vk_set_layouts);
 
         let layout = unsafe {
             device
