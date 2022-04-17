@@ -7,6 +7,7 @@ use crate::core::{
     device::{LogicalDevice, LogicalDeviceError, Queue},
 };
 
+/// Errors that can be returned by a `Buffer"
 #[derive(thiserror::Error, Debug)]
 pub enum BufferError {
     #[error("Can't copy from buffer: {0}")]
@@ -16,16 +17,18 @@ pub enum BufferError {
 }
 
 bitflags! {
+    /// Wraps VkBufferUsageFlagBits
     pub struct BufferUsageFlags: u32 {
+        /// Buffer can be used as the source of a transfer command
         const TRANSFER_SRC = 0x1;
+        /// Buffer can be used as the destination of a transfer command
         const TRANSFER_DST = 0x2;
-        const UNIFORM_TEXEL = 0x4;
-        const STORAGE_TEXEL = 0x8;
+        /// Buffer can be used to create a descriptor buffer info
         const UNIFORM_BUFFER = 0x10;
-        const STORAGE_BUFFER = 0x20;
+        /// Buffer is able to be passed to `bind_index_buffer`
         const INDEX_BUFFER = 0x40;
+        /// Buffer is able to be passed to `bind_vertex_buffer`
         const VERTEX_BUFFER = 0x80;
-        const INDIRECT_BUFFER = 0x100;
     }
 }
 
@@ -36,12 +39,14 @@ impl Into<vk::BufferUsageFlags> for BufferUsageFlags {
 }
 
 bitflags! {
+    /// Wraps VkMemoryPropertyFlagBits
     pub struct MemoryPropertyFlags: u32 {
+        /// Memory allocated is the most efficient for device access
         const DEVICE_LOCAL = 0b1;
+        /// Memory allocated can be mapped for host access
         const HOST_VISIBLE = 0b10;
+        /// Manually host memory flushing is not needed to make writes visible
         const HOST_COHERENT = 0b100;
-        const HOST_CACHED = 0b1000;
-        const LAZILY_ALLOCATED = 0b10000;
     }
 }
 
@@ -51,17 +56,27 @@ impl Into<vk::MemoryPropertyFlags> for MemoryPropertyFlags {
     }
 }
 
+/// Wraps a Vulkan buffer and device memory
 pub struct Buffer<T, const CAPACITY: usize> {
+    /// Mapped memory address where writes can be seen by both the device and host
     mapped: Option<*mut T>,
+    /// Usage flags set on the buffer
     usage: BufferUsageFlags,
+    /// Size, in bytes, of the buffer assuming the whole capacity is used up
     size: usize,
 
+    /// Opaque object handle to Vulkan buffer
     handle: vk::Buffer,
+    /// Opaque object handle to Vulkan device memory belonging to the buffer
     memory: vk::DeviceMemory,
+    /// [`LogicalDevice`] the buffer and memory belong to
     device: Rc<LogicalDevice>,
 }
 
 impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
+    /// Creates a new [`Buffer`]
+    ///
+    /// TODO: Remove `min_offset_alignment` as a parameter and set it automatically
     pub fn new(
         device: Rc<LogicalDevice>,
         usage: BufferUsageFlags,
@@ -121,10 +136,16 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
 }
 
 impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
+    /// Returns the number of instances of `T` that can be stored in the buffer
     pub fn capacity(&self) -> usize {
         CAPACITY 
     }
 
+    /// Returns a corresponding descriptor buffer info if the buffer has been marked with a
+    /// `BufferUsageFlag` that can be used in a descriptor set.
+    ///
+    /// FIXME: Return an Option<vk::DescriptorBufferInfo> as only buffer's with appropriate buffer
+    /// usage flags should be able to return a descriptor buffer info
     pub fn descriptor(&self) -> vk::DescriptorBufferInfo {
         vk::DescriptorBufferInfo {
             buffer: self.handle,
@@ -133,12 +154,14 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
         }
     }
 
+    /// Returns a Vulkan handle to the Vulkan buffer
     pub(crate) fn vk_handle(&self) -> vk::Buffer {
         self.handle
     }
 }
 
 impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
+    /// Maps `size` amount of device memory for write access.
     pub fn map(&mut self, size: u64, offset: u64) -> Result<(), BufferError> {
         self.mapped = Some(unsafe {
             self.device
@@ -151,6 +174,8 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
         Ok(())
     }
 
+    /// Unmaps the device memory associated with the buffer meaning write operations will have no
+    /// effect.
     pub fn unmap(&mut self) {
         if let Some(_) = self.mapped {
             unsafe {
@@ -160,6 +185,10 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
         }
     }
 
+    /// Writes data to the buffer as long as the device memory has been mapped using
+    /// [`Buffer::map`].
+    ///
+    /// Will unmap the memory after the write
     pub fn write(&mut self, data: &[T; CAPACITY]) {
         if let Some(mapped) = self.mapped {
             unsafe {
@@ -169,6 +198,11 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
         }
     }
 
+    /// Copies data from a buffer with the same data type and capacity to this buffer's device
+    /// memory through the use of a transfer command.
+    ///
+    /// Requires that [`BufferUsageFlags::TRANSFER_DST`] and [`BufferUsageFlags::TRANSFER_SRC`] are
+    /// set accordingly.
     pub fn copy_from(
         &mut self,
         buffer: &Buffer<T, CAPACITY>,
