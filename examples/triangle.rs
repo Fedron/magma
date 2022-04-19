@@ -36,7 +36,7 @@ fn main() -> Result<()> {
     let instance = Instance::new(&[DebugLayer::KhronosValidation])?;
     let physical_device = PhysicalDevice::builder()
         .preferred_type(PhysicalDeviceType::CPU)
-        .add_queue_family(QueueFamily::new(Queue::Graphics))
+        .add_queue_family(QueueFamily::new(QueueFlags::Graphics))
         .device_extensions(&[DeviceExtension::Swapchain])
         .build(&instance)?;
     let logical_device = Rc::new(LogicalDevice::new(instance, physical_device)?);
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
         logical_device.clone(),
         logical_device
             .physical_device()
-            .queue_family(Queue::Graphics)
+            .queue_family(QueueFlags::Graphics)
             .unwrap(),
     )?;
     command_pool.allocate_buffers(

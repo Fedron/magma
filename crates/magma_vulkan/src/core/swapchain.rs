@@ -4,7 +4,7 @@ use std::{mem::ManuallyDrop, rc::Rc};
 use crate::{
     core::{
         commands::buffer::CommandBuffer,
-        device::{DeviceExtension, LogicalDevice, LogicalDeviceError, Queue},
+        device::{DeviceExtension, LogicalDevice, LogicalDeviceError, QueueFlags},
         surface::Surface,
     },
     buffer::MemoryPropertyFlags,
@@ -27,7 +27,7 @@ pub enum SwapchainError {
     #[error(
         "Can't create a swapchain because the device wasn't created with a '{0}' queue family"
     )]
-    MissingQueueFamily(Queue),
+    MissingQueueFamily(QueueFlags),
     #[error("Failed to create a Vulkan render pass: {0}")]
     CantCreateRenderPass(VulkanError),
     #[error("Failed to create a Vulkan framebuffer: {0}")]
@@ -142,9 +142,9 @@ impl SwapchainBuilder {
             .physical_device()
             .queue_families()
             .iter()
-            .any(|family| family.ty == Queue::Graphics)
+            .any(|family| family.ty.contains(QueueFlags::GRAPHICS))
         {
-            return Err(SwapchainError::MissingQueueFamily(Queue::Graphics));
+            return Err(SwapchainError::MissingQueueFamily(QueueFlags::GRAPHICS));
         }
 
         let surface_format = self.choose_format(&surface.formats());
@@ -678,7 +678,7 @@ impl Swapchain {
         let reset_fences = [&self.in_flight_fences[self.current_frame]];
         self.device.reset_fences(&reset_fences)?;
 
-        let graphics_queue = self.device.queue(Queue::Graphics);
+        let graphics_queue = self.device.queue(QueueFlags::GRAPHICS);
         if graphics_queue.is_none() {
             return Err(SwapchainError::DeviceMissingGraphicsQueue);
         }

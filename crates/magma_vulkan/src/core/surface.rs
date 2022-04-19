@@ -1,7 +1,7 @@
 use ash::vk;
 
 use crate::{
-    core::device::{DeviceExtension, PhysicalDevice, Queue},
+    core::device::{DeviceExtension, PhysicalDevice, QueueFlags},
     core::instance::Instance,
     VulkanError,
 };
@@ -12,7 +12,7 @@ pub enum SurfaceError {
     #[error("Can't create a surface on the device provided as it doesn't have the DeviceExtension::Swapchain")]
     DeviceNotCapable,
     #[error("Can't create a surface on a device that wasn't created with a '{0}' queue family")]
-    MissingQueueFamily(Queue),
+    MissingQueueFamily(QueueFlags),
     #[error("Failed to create a surface for Windows")]
     CantCreateWin32Surface(VulkanError),
     #[error("Failed to create a surface for Linux: {0}")]
@@ -62,9 +62,9 @@ impl Surface {
         let graphics_family = physical_device
             .queue_families()
             .iter()
-            .find(|family| family.ty == Queue::Graphics);
+            .find(|family| family.ty.contains(QueueFlags::GRAPHICS));
         if graphics_family.is_none() {
-            return Err(SurfaceError::MissingQueueFamily(Queue::Graphics));
+            return Err(SurfaceError::MissingQueueFamily(QueueFlags::GRAPHICS));
         }
 
         let surface = ash::extensions::khr::Surface::new(instance.entry(), instance.vk_handle());

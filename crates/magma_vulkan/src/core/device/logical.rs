@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use ash::vk;
 
-use super::{PhysicalDevice, Queue};
+use super::{PhysicalDevice, QueueFlags};
 use crate::{
     core::{
         device::QueueHandle,
@@ -125,8 +125,8 @@ impl LogicalDevice {
     }
 
     /// Returns a [QueueHandle] to a queue with the type `ty`
-    pub fn queue(&self, ty: Queue) -> Option<&QueueHandle> {
-        self.queues.iter().find(|queue| queue.ty == ty)
+    pub fn queue(&self, ty: QueueFlags) -> Option<&QueueHandle> {
+        self.queues.iter().find(|queue| queue.ty.contains(ty))
     }
 
     /// Returns the [PhysicalDevcie] this logical device is interfacing with

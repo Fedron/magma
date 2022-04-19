@@ -1,7 +1,8 @@
 //! This module wraps Vulkan physical and logical devices
 
-use std::fmt::Display;
 use ash::vk;
+use bitflags::bitflags;
+use std::fmt::Display;
 
 mod logical;
 mod physical;
@@ -27,43 +28,24 @@ impl Display for DeviceExtension {
     }
 }
 
-/// Represents Vulkan queue flags
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Queue {
-    Graphics,
-    Compute,
-    Transfer,
-    Sparse,
-    Protected,
-    VideoDecode,
-    VideoEncode,
-}
-
-impl Display for Queue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Queue::Graphics => write!(f, "Graphics"),
-            Queue::Compute => write!(f, "Compute"),
-            Queue::Transfer => write!(f, "Transfer"),
-            Queue::Sparse => write!(f, "Sparse"),
-            Queue::Protected => write!(f, "Protected"),
-            Queue::VideoDecode => write!(f, "Video Decode"),
-            Queue::VideoEncode => write!(f, "Video Encode"),
-        }
+bitflags! {
+    /// Represents Vulkan queue flags
+    pub struct QueueFlags: u32 {
+        const GRAPHICS = 0x1;
+        const COMPUTE = 0x2;
+        const TRANSFER = 0x4;
     }
 }
 
-impl Into<vk::QueueFlags> for Queue {
+impl Display for QueueFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#?}", self)
+    }
+}
+
+impl Into<vk::QueueFlags> for QueueFlags {
     fn into(self) -> vk::QueueFlags {
-        match self {
-            Queue::Graphics => vk::QueueFlags::GRAPHICS,
-            Queue::Compute => vk::QueueFlags::COMPUTE,
-            Queue::Transfer => vk::QueueFlags::TRANSFER,
-            Queue::Sparse => vk::QueueFlags::SPARSE_BINDING,
-            Queue::Protected => vk::QueueFlags::PROTECTED,
-            Queue::VideoDecode => vk::QueueFlags::VIDEO_DECODE_KHR,
-            Queue::VideoEncode => vk::QueueFlags::VIDEO_ENCODE_KHR,
-        }
+        vk::QueueFlags::from_raw(self.bits())
     }
 }
 
@@ -72,21 +54,21 @@ pub struct QueueHandle {
     /// Opaque handle to Vulkan Queue
     pub(crate) handle: vk::Queue,
     /// Type of the Queue
-    pub ty: Queue,
+    pub ty: QueueFlags,
 }
 
 /// Wraps the index of a given Queue type
 #[derive(Clone, Copy, Debug)]
 pub struct QueueFamily {
     /// Type of the queue family
-    pub ty: Queue,
+    pub ty: QueueFlags,
     /// Index on the device where the queue is
     pub index: Option<u32>,
 }
 
 impl QueueFamily {
     /// Creates a new [QueueFamily] of the type setting the index to `None`
-    pub fn new(ty: Queue) -> QueueFamily {
+    pub fn new(ty: QueueFlags) -> QueueFamily {
         QueueFamily { ty, index: None }
     }
 }

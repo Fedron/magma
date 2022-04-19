@@ -5,7 +5,7 @@ use crate::{
     utils, VulkanError,
 };
 
-use super::{DeviceExtension, Queue};
+use super::{DeviceExtension, QueueFlags};
 
 /// Errors that the physical device can throw
 #[derive(thiserror::Error, Debug)]
@@ -276,8 +276,8 @@ impl PhysicalDevice {
     /// `ty`.
     ///
     /// If no queue families have the type `ty`, then `None` is returned.
-    pub fn queue_family(&self, ty: Queue) -> Option<&QueueFamily> {
-        self.queue_families.iter().find(|family| family.ty == ty)
+    pub fn queue_family(&self, ty: QueueFlags) -> Option<&QueueFamily> {
+        self.queue_families.iter().find(|family| family.ty.contains(ty))
     }
 
     /// Returns the Vulkan physical device properties

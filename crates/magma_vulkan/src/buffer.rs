@@ -4,7 +4,7 @@ use std::{rc::Rc, usize};
 
 use crate::core::{
     commands::pool::CommandPool,
-    device::{LogicalDevice, LogicalDeviceError, Queue},
+    device::{LogicalDevice, LogicalDeviceError, QueueFlags},
 };
 
 /// Errors that can be returned by a `Buffer"
@@ -269,7 +269,7 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
             .build()];
 
         unsafe {
-            let transfer_queue = self.device.queue(Queue::Graphics).ok_or(BufferError::InvalidCopy("Missing transfer queue on logical devcie"))?;
+            let transfer_queue = self.device.queue(QueueFlags::GRAPHICS).ok_or(BufferError::InvalidCopy("Missing transfer queue on logical devcie"))?;
 
             self.device
                 .vk_handle()

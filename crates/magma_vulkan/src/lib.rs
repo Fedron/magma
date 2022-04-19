@@ -136,7 +136,7 @@ pub mod prelude {
     pub use crate::core::debugger::DebugLayer;
     pub use crate::core::device::{
         DeviceExtension, LogicalDevice, LogicalDeviceError, PhysicalDevice, PhysicalDeviceBuilder,
-        PhysicalDeviceError, PhysicalDeviceType, Queue, QueueFamily,
+        PhysicalDeviceError, PhysicalDeviceType, QueueFlags, QueueFamily,
     };
     pub use crate::core::instance::{Instance, InstanceError};
     pub use crate::core::surface::{Surface, SurfaceError};
