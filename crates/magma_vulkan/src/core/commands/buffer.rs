@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::{
     buffer::Buffer,
     core::device::LogicalDevice,
-    pipeline::{vertex::Vertex, ubo::UniformBuffer, Pipeline},
+    pipeline::{ubo::UniformBuffer, vertex::Vertex, Pipeline},
     VulkanError,
 };
 
@@ -24,7 +24,7 @@ pub enum CommandBufferError {
 }
 
 /// Represent the current lifecyle stage the command buffer is in
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum CommandBufferState {
     /// Command buffer was just allocated, or reset
     Initial,
@@ -71,10 +71,9 @@ impl Into<vk::CommandBufferLevel> for CommandBufferLevel {
 
 /// Wraps a Vulkan command buffer
 pub struct CommandBuffer {
-    /// Whether the command buffer is recording
-    ///
-    /// FIXME: This could use CommandBufferState
-    recording: bool,
+    /// Which state the command buffer is in currently, determines what the command buffer can be
+    /// used for and what methods can be used
+    state: CommandBufferState,
     /// Whether a render pass was started on the command buffer
     started_render_pass: bool,
     /// The color to clear to
@@ -90,7 +89,7 @@ impl CommandBuffer {
     /// Creates a new [CommandBuffer]
     pub fn new(handle: vk::CommandBuffer, device: Rc<LogicalDevice>) -> CommandBuffer {
         CommandBuffer {
-            recording: false,
+            state: CommandBufferState::Initial,
             started_render_pass: false,
             clear_color: (1.0, 0.0, 1.0),
 
@@ -111,7 +110,10 @@ impl CommandBuffer {
     /// Begins recording a command buffer, transitioning it into the
     /// [CommandBufferState::Recording] state.
     pub fn begin(&mut self) -> Result<(), CommandBufferError> {
-        if self.recording {
+        if !(self.state == CommandBufferState::Initial
+            || self.state == CommandBufferState::Invalid
+            || self.state == CommandBufferState::Executable)
+        {
             return Err(CommandBufferError::IncorrectState(
                 CommandBufferState::Initial,
             ));
@@ -127,7 +129,7 @@ impl CommandBuffer {
                 .begin_command_buffer(self.handle, &begin_info)
                 .map_err(|err| CommandBufferError::DeviceError(err.into()))?;
         };
-        self.recording = true;
+        self.state = CommandBufferState::Recording;
 
         Ok(())
     }
@@ -135,7 +137,7 @@ impl CommandBuffer {
     /// Finishes recording the command buffer, transitioning the command buffer to the
     /// [CommandBufferState::Executable] state.
     pub fn end(&mut self) -> Result<(), CommandBufferError> {
-        if !self.recording {
+        if self.state != CommandBufferState::Recording {
             return Err(CommandBufferError::IncorrectState(
                 CommandBufferState::Recording,
             ));
@@ -151,7 +153,7 @@ impl CommandBuffer {
                 .end_command_buffer(self.handle)
                 .map_err(|err| CommandBufferError::DeviceError(err.into()))?;
         };
-        self.recording = false;
+        self.state = CommandBufferState::Executable;
 
         Ok(())
     }
@@ -165,7 +167,7 @@ impl CommandBuffer {
 
     /// Sets the Vulkan viewport, will have an depth of 0-1 and be positioned at (0,0)
     pub fn set_viewport(&mut self, width: f32, height: f32) -> Result<(), CommandBufferError> {
-        if !self.recording {
+        if self.state != CommandBufferState::Recording {
             return Err(CommandBufferError::IncorrectState(
                 CommandBufferState::Recording,
             ));
@@ -191,7 +193,7 @@ impl CommandBuffer {
 
     /// Sets the Vulkan scissor, will have an offset of (0, 0)
     pub fn set_scissor(&mut self, extent: (u32, u32)) -> Result<(), CommandBufferError> {
-        if !self.recording {
+        if self.state != CommandBufferState::Recording {
             return Err(CommandBufferError::IncorrectState(
                 CommandBufferState::Recording,
             ));
@@ -291,7 +293,7 @@ impl CommandBuffer {
     pub fn bind_pipeline<V, P>(&mut self, pipeline: &Pipeline<V, P>)
     where
         V: Vertex,
-        P: UniformBuffer
+        P: UniformBuffer,
     {
         unsafe {
             self.device.vk_handle().cmd_bind_pipeline(
