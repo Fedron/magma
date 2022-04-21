@@ -78,6 +78,7 @@ pub struct CommandBuffer {
     started_render_pass: bool,
     /// The color to clear to
     clear_color: (f32, f32, f32),
+    /// Vulkan handle of the currently bound graphics pipeline
     current_pipeline: Option<vk::Pipeline>,
 
     /// Opaque handle to Vulkan command buffer
@@ -107,6 +108,7 @@ impl CommandBuffer {
         self.handle
     }
 
+    /// Returns the Vulkan handle to the graphics pipeline that was most previously bound
     pub fn currently_bound_pipeline(&self) -> Option<vk::Pipeline> {
         self.current_pipeline
     }
@@ -125,7 +127,6 @@ impl CommandBuffer {
             ));
         }
 
-        // TODO: Allow user to set the flags
         let begin_info = vk::CommandBufferBeginInfo::builder()
             .flags(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE);
 
@@ -224,11 +225,8 @@ impl CommandBuffer {
 
     /// Begins a render pass on the command buffer.
     ///
-    /// The render pass will clear the framebuffer to the clear color of the [CommandBuffer].
-    ///
-    /// TODO: Let the user decide wether to clear the framebuffer, and if so what attachment to
-    /// clear
-    /// TODO: Wrap framebuffer and extent into one struct
+    /// The render pass will clear the framebuffer to the clear color of the [CommandBuffer]. The
+    /// depth stencil attachment will also be cleared
     pub fn begin_render_pass(
         &mut self,
         render_pass: vk::RenderPass,
@@ -348,16 +346,14 @@ impl CommandBuffer {
         );
     }
 
-    /// Adds a non-indexed draw command to the [CommandBuffer]
-    pub fn draw(
+    /// Draws from the vertices in the previoulsy bound vertex buffer
+    pub unsafe fn draw(
         &self,
         vertex_count: u32,
         instance_count: u32,
         first_vertex: u32,
         first_instance: u32,
     ) {
-        // TODO: check how many vertices/indices were bound and draw that many vertices
-        unsafe {
             self.device.vk_handle().cmd_draw(
                 self.handle,
                 vertex_count,
@@ -365,10 +361,10 @@ impl CommandBuffer {
                 first_vertex,
                 first_instance,
             );
-        };
     }
 
-    pub fn draw_indexed(
+    /// Draws from a vertex buffer using an index buffer as well
+    pub unsafe fn draw_indexed(
         &self,
         index_count: u32,
         instance_count: u32,
@@ -376,7 +372,6 @@ impl CommandBuffer {
         vertex_offset: u32,
         first_instance: u32,
     ) {
-        unsafe {
             self.device.vk_handle().cmd_draw_indexed(
                 self.handle,
                 index_count,
@@ -385,6 +380,5 @@ impl CommandBuffer {
                 vertex_offset as i32,
                 first_instance,
             );
-        };
     }
 }
