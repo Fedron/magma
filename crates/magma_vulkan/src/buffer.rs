@@ -157,6 +157,10 @@ impl<T, const CAPACITY: usize> Buffer<T, CAPACITY> {
         }
     }
 
+    pub fn usage(&self) -> BufferUsageFlags {
+        self.usage
+    }
+
     /// Returns a Vulkan handle to the Vulkan buffer
     pub(crate) fn vk_handle(&self) -> vk::Buffer {
         self.handle

@@ -2,7 +2,7 @@ use ash::vk;
 use std::rc::Rc;
 
 use crate::{
-    buffer::Buffer,
+    buffer::{Buffer, BufferUsageFlags},
     core::device::LogicalDevice,
     pipeline::{ubo::UniformBuffer, vertex::Vertex, Pipeline},
     VulkanError,
@@ -308,11 +308,18 @@ impl CommandBuffer {
         self.current_pipeline = Some(pipeline.vk_handle());
     }
 
-    // TODO: check buffer has the VERTEX_BUFFER usage flag
+    /// Binds a vertex buffer
     pub unsafe fn bind_vertex_buffer<T, const CAPACITY: usize>(
         &mut self,
         buffer: &Buffer<T, CAPACITY>,
     ) {
+        if !buffer.usage().contains(BufferUsageFlags::VERTEX_BUFFER) {
+            log::warn!(
+                "Can't bind a buffer as vertex buffer if it's usage hasn't been marked as such"
+            );
+            return;
+        }
+
         let buffers = [buffer.vk_handle()];
         let offsets = [0];
 
@@ -321,11 +328,18 @@ impl CommandBuffer {
             .cmd_bind_vertex_buffers(self.handle, 0, &buffers, &offsets);
     }
 
-    // TODO: check buffer has the INDEX_BUFFER usage flag
+    /// Binds an index buffer
     pub unsafe fn bind_index_buffer<const CAPACITY: usize>(
         &mut self,
         buffer: &Buffer<u32, CAPACITY>,
     ) {
+        if !buffer.usage().contains(BufferUsageFlags::INDEX_BUFFER) {
+            log::warn!(
+                "Can't bind a buffer as an index buffer it it's usage hasn't been marked as such"
+            );
+            return;
+        }
+
         self.device.vk_handle().cmd_bind_index_buffer(
             self.handle,
             buffer.vk_handle(),
