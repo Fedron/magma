@@ -11,6 +11,7 @@ use self::{
     vertex::{EmptyVertex, Vertex},
 };
 use crate::{
+    buffer::Buffer,
     core::{commands::buffer::CommandBuffer, device::LogicalDevice},
     descriptors::DescriptorSetLayout,
     VulkanError,
@@ -285,7 +286,20 @@ where
     V: Vertex,
     P: UniformBuffer,
 {
-    pub fn set_push_constant(&self, command_buffer: &CommandBuffer, data: P) {
+    pub fn bind_push_constant(&self, command_buffer: &CommandBuffer, data: P) {
+        match command_buffer.currently_bound_pipeline() {
+            Some(pipeline) => {
+                if pipeline != self.handle {
+                    log::warn!("A different pipeline is bound so can't bind this pipeline's push constants");
+                    return;
+                }
+            }
+            None => {
+                log::warn!("No pipeline is bound so this pipeline's push constants can't be bound");
+                return;
+            }
+        }
+
         unsafe {
             self.device.vk_handle().cmd_push_constants(
                 command_buffer.vk_handle(),
@@ -297,7 +311,21 @@ where
         };
     }
 
-    pub fn set_descriptor_sets(&self, command_buffer: &CommandBuffer, sets: &[vk::DescriptorSet]) {
+    /// FIXME: check descriptor sets are defined by this pipeline
+    pub fn bind_descriptor_sets(&self, command_buffer: &CommandBuffer, sets: &[vk::DescriptorSet]) {
+        match command_buffer.currently_bound_pipeline() {
+            Some(pipeline) => {
+                if pipeline != self.handle {
+                    log::warn!("A different pipeline is bound so can't bind this pipeline's descriptor sets");
+                    return;
+                }
+            }
+            None => {
+                log::warn!("No pipeline is bound so this pipeline's descriptor sets can't be bound");
+                return;
+            }
+        }
+
         unsafe {
             self.device.vk_handle().cmd_bind_descriptor_sets(
                 command_buffer.vk_handle(),
@@ -308,6 +336,35 @@ where
                 &[],
             );
         };
+    }
+
+    pub fn bind(&self, command_buffer: &mut CommandBuffer) {
+        command_buffer.bind_pipeline(self);
+    }
+
+    pub fn draw<const CAPACITY: usize>(
+        &self,
+        command_buffer: &mut CommandBuffer,
+        vertex_buffer: &Buffer<V, CAPACITY>,
+    ) {
+        unsafe {
+            command_buffer.bind_vertex_buffer(vertex_buffer);
+        };
+        command_buffer.draw(CAPACITY as u32, 1, 0, 0);
+    }
+
+    pub fn draw_indexed<const V_CAPACITY: usize, const I_CAPACITY: usize>(
+        &self,
+        command_buffer: &mut CommandBuffer,
+        vertex_buffer: &Buffer<V, V_CAPACITY>,
+        index_buffer: &Buffer<u32, I_CAPACITY>,
+    ) {
+        unsafe {
+            command_buffer.bind_vertex_buffer(vertex_buffer);
+            command_buffer.bind_index_buffer(index_buffer);
+        };
+
+        command_buffer.draw_indexed(I_CAPACITY as u32, 1, 0, 0, 0);
     }
 }
 

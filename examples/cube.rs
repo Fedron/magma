@@ -257,20 +257,16 @@ fn main() -> Result<()> {
         command_buffer.set_viewport(extent.0 as f32, extent.1 as f32)?;
         command_buffer.set_scissor(extent.clone())?;
 
-        command_buffer.bind_pipeline(&pipeline);
-        command_buffer.bind_vertex_buffer(&vertex_buffer);
-        command_buffer.bind_index_buffer(&index_buffer);
-
-        pipeline.set_push_constant(
-            &command_buffer,
+        pipeline.bind(command_buffer);
+        pipeline.bind_push_constant(
+            command_buffer,
             PushConstant {
                 _transform_matrix: camera.projection_matrix
                     * camera.view_matrix
                     * cube_transform.as_matrix(),
             },
         );
-
-        command_buffer.draw_indexed(36, 1, 0, 0, 0);
+        pipeline.draw_indexed(command_buffer, &vertex_buffer, &index_buffer);
 
         command_buffer.end_render_pass();
         command_buffer.end()?;

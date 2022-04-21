@@ -36,7 +36,7 @@ fn main() -> Result<()> {
     let instance = Instance::new(&[DebugLayer::KhronosValidation])?;
     let physical_device = PhysicalDevice::builder()
         .preferred_type(PhysicalDeviceType::CPU)
-        .add_queue_family(QueueFamily::new(QueueFlags::Graphics))
+        .add_queue_family(QueueFamily::new(QueueFlags::GRAPHICS))
         .device_extensions(&[DeviceExtension::Swapchain])
         .build(&instance)?;
     let logical_device = Rc::new(LogicalDevice::new(instance, physical_device)?);
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
         logical_device.clone(),
         logical_device
             .physical_device()
-            .queue_family(QueueFlags::Graphics)
+            .queue_family(QueueFlags::GRAPHICS)
             .unwrap(),
     )?;
     command_pool.allocate_buffers(
@@ -165,11 +165,8 @@ fn main() -> Result<()> {
         command_buffer.set_viewport(extent.0 as f32, extent.1 as f32)?;
         command_buffer.set_scissor(extent.clone())?;
 
-        command_buffer.bind_pipeline(&pipeline);
-        // Since our pipeline was created with vertex inputs it now expects a vertex buffer to be
-        // bound before we call `draw()`
-        command_buffer.bind_vertex_buffer(&vertex_buffer);
-        command_buffer.draw(3, 1, 0, 0);
+        pipeline.bind(command_buffer);
+        pipeline.draw(command_buffer, &vertex_buffer);
 
         command_buffer.end_render_pass();
         command_buffer.end()?;

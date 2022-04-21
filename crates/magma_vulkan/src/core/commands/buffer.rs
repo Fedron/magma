@@ -78,6 +78,7 @@ pub struct CommandBuffer {
     started_render_pass: bool,
     /// The color to clear to
     clear_color: (f32, f32, f32),
+    current_pipeline: Option<vk::Pipeline>,
 
     /// Opaque handle to Vulkan command buffer
     handle: vk::CommandBuffer,
@@ -92,6 +93,7 @@ impl CommandBuffer {
             state: CommandBufferState::Initial,
             started_render_pass: false,
             clear_color: (1.0, 0.0, 1.0),
+            current_pipeline: None,
 
             handle,
             device,
@@ -103,6 +105,10 @@ impl CommandBuffer {
     /// Returns the Vulkan handle to the command buffer
     pub(crate) fn vk_handle(&self) -> vk::CommandBuffer {
         self.handle
+    }
+
+    pub fn currently_bound_pipeline(&self) -> Option<vk::Pipeline> {
+        self.current_pipeline
     }
 }
 
@@ -287,9 +293,6 @@ impl CommandBuffer {
     }
 
     /// Binds a graphics pipeline
-    ///
-    /// TODO: Check that everything the pipeline needs is also bound, i.e. vertex buffers, ubos,
-    /// push constants etc
     pub fn bind_pipeline<V, P>(&mut self, pipeline: &Pipeline<V, P>)
     where
         V: Vertex,
@@ -302,30 +305,33 @@ impl CommandBuffer {
                 pipeline.vk_handle(),
             )
         };
+        self.current_pipeline = Some(pipeline.vk_handle());
     }
 
     // TODO: check buffer has the VERTEX_BUFFER usage flag
-    pub fn bind_vertex_buffer<T, const CAPACITY: usize>(&mut self, buffer: &Buffer<T, CAPACITY>) {
+    pub unsafe fn bind_vertex_buffer<T, const CAPACITY: usize>(
+        &mut self,
+        buffer: &Buffer<T, CAPACITY>,
+    ) {
         let buffers = [buffer.vk_handle()];
         let offsets = [0];
 
-        unsafe {
-            self.device
-                .vk_handle()
-                .cmd_bind_vertex_buffers(self.handle, 0, &buffers, &offsets);
-        };
+        self.device
+            .vk_handle()
+            .cmd_bind_vertex_buffers(self.handle, 0, &buffers, &offsets);
     }
 
     // TODO: check buffer has the INDEX_BUFFER usage flag
-    pub fn bind_index_buffer<const CAPACITY: usize>(&mut self, buffer: &Buffer<u32, CAPACITY>) {
-        unsafe {
-            self.device.vk_handle().cmd_bind_index_buffer(
-                self.handle,
-                buffer.vk_handle(),
-                0,
-                vk::IndexType::UINT32,
-            );
-        };
+    pub unsafe fn bind_index_buffer<const CAPACITY: usize>(
+        &mut self,
+        buffer: &Buffer<u32, CAPACITY>,
+    ) {
+        self.device.vk_handle().cmd_bind_index_buffer(
+            self.handle,
+            buffer.vk_handle(),
+            0,
+            vk::IndexType::UINT32,
+        );
     }
 
     /// Adds a non-indexed draw command to the [CommandBuffer]
