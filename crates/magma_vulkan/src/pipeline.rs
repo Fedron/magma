@@ -349,8 +349,8 @@ where
     ) {
         unsafe {
             command_buffer.bind_vertex_buffer(vertex_buffer);
+            command_buffer.draw(CAPACITY as u32, 1, 0, 0);
         };
-        command_buffer.draw(CAPACITY as u32, 1, 0, 0);
     }
 
     pub fn draw_indexed<const V_CAPACITY: usize, const I_CAPACITY: usize>(
@@ -362,9 +362,8 @@ where
         unsafe {
             command_buffer.bind_vertex_buffer(vertex_buffer);
             command_buffer.bind_index_buffer(index_buffer);
+            command_buffer.draw_indexed(I_CAPACITY as u32, 1, 0, 0, 0);
         };
-
-        command_buffer.draw_indexed(I_CAPACITY as u32, 1, 0, 0, 0);
     }
 }
 
