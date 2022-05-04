@@ -87,6 +87,12 @@ pub struct CommandBuffer {
     device: Rc<LogicalDevice>,
 }
 
+impl PartialEq for CommandBuffer {
+    fn eq(&self, other: &Self) -> bool {
+        self.handle == other.handle
+    }
+}
+
 impl CommandBuffer {
     /// Creates a new [CommandBuffer]
     pub fn new(handle: vk::CommandBuffer, device: Rc<LogicalDevice>) -> CommandBuffer {
