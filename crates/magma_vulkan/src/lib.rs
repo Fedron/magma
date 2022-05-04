@@ -2,12 +2,12 @@
 
 extern crate log;
 
-mod buffer;
-mod core;
-mod descriptors;
-mod pipeline;
-mod sync;
-mod utils;
+pub mod buffer;
+pub mod core;
+pub mod descriptors;
+pub mod pipeline;
+pub mod sync;
+pub mod utils;
 
 use ash::vk::Result as VkResult;
 
