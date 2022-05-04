@@ -311,7 +311,7 @@ impl SwapchainBuilder {
     /// Chooses the extent of the swapchain by clapming it to the [Surface] min and max image
     /// extent.
     fn choose_extent(&self, capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
-        if capabilities.current_extent.width != std::u32::MAX {
+        if capabilities.current_extent.width != u32::MAX {
             capabilities.current_extent
         } else {
             vk::Extent2D {
@@ -611,14 +611,14 @@ impl Swapchain {
         self.device.wait_for_fences(
             &[&self.in_flight_fences[self.current_frame]],
             true,
-            std::u64::MAX,
+            u64::MAX,
         )?;
 
         let result = unsafe {
             self.swapchain
                 .acquire_next_image(
                     self.handle,
-                    std::u64::MAX,
+                    u64::MAX,
                     self.image_available_semaphores[self.current_frame].vk_handle(),
                     vk::Fence::null(),
                 )
@@ -647,7 +647,7 @@ impl Swapchain {
             unsafe {
                 self.device
                     .vk_handle()
-                    .wait_for_fences(&wait_fences, true, std::u64::MAX)
+                    .wait_for_fences(&wait_fences, true, u64::MAX)
                     .map_err(|err| {
                         SwapchainError::DeviceError(LogicalDeviceError::Other(err.into()))
                     })?;
