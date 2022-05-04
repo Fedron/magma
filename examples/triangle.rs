@@ -198,7 +198,7 @@ fn recreate_swapchain(
     surface.update(logical_device.physical_device())?;
 
     let swapchain = Swapchain::builder()
-        .old_swapchain(old_swapchain)
+        .old_swapchain(&old_swapchain)
         .preferred_color_format(ColorFormat::Srgb)
         .preferred_present_mode(PresentMode::Mailbox)
         .build(logical_device.clone(), surface)?;
