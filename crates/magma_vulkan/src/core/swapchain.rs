@@ -1,5 +1,5 @@
 use ash::vk;
-use std::{mem::ManuallyDrop, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
     core::{
@@ -85,7 +85,7 @@ pub struct SwapchainBuilder {
     /// Preferred present mode to use
     preferred_present_mode: PresentMode,
     /// Old [Swapchain] to create the new [Swapchain] from
-    old_swapchain: Option<ManuallyDrop<Swapchain>>,
+    old_swapchain: vk::SwapchainKHR,
 }
 
 impl SwapchainBuilder {
@@ -94,7 +94,7 @@ impl SwapchainBuilder {
         SwapchainBuilder {
             preferred_color_format: ColorFormat::Unorm,
             preferred_present_mode: PresentMode::Fifo,
-            old_swapchain: None,
+            old_swapchain: vk::SwapchainKHR::null(),
         }
     }
 
@@ -111,8 +111,8 @@ impl SwapchainBuilder {
     }
 
     /// Sets the old [Swapchain] to base the new [Swapchain] from
-    pub fn old_swapchain(mut self, swapchain: Swapchain) -> SwapchainBuilder {
-        self.old_swapchain = Some(ManuallyDrop::new(swapchain));
+    pub fn old_swapchain(mut self, swapchain: &Swapchain) -> SwapchainBuilder {
+        self.old_swapchain = swapchain.vk_handle();
         self
     }
 
@@ -167,11 +167,6 @@ impl SwapchainBuilder {
             .map(|family| family.index.unwrap())
             .collect();
 
-        let old_swapchain = if self.old_swapchain.is_some() {
-            self.old_swapchain.as_ref().unwrap().handle
-        } else {
-            vk::SwapchainKHR::null()
-        };
         let create_info = vk::SwapchainCreateInfoKHR::builder()
             .surface(surface.vk_handle())
             .min_image_count(image_count)
@@ -186,7 +181,7 @@ impl SwapchainBuilder {
             .present_mode(present_mode)
             .clipped(true)
             .image_array_layers(1)
-            .old_swapchain(old_swapchain);
+            .old_swapchain(self.old_swapchain);
 
         let swapchain =
             ash::extensions::khr::Swapchain::new(device.instance().vk_handle(), device.vk_handle());
@@ -195,12 +190,6 @@ impl SwapchainBuilder {
                 .create_swapchain(&create_info, None)
                 .map_err(|err| SwapchainError::CantCreate(err.into()))?
         };
-
-        if self.old_swapchain.is_some() {
-            unsafe {
-                ManuallyDrop::drop(&mut self.old_swapchain.unwrap());
-            };
-        }
 
         let images = unsafe {
             swapchain
@@ -582,6 +571,10 @@ impl Swapchain {
 }
 
 impl Swapchain {
+    pub(crate) fn vk_handle(&self) -> vk::SwapchainKHR {
+        self.handle
+    }
+
     /// Returns the extent (width, height) of the swapchain
     pub fn extent(&self) -> (u32, u32) {
         (self.extent.width, self.extent.height)
