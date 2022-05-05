@@ -70,6 +70,7 @@ impl Into<vk::CommandBufferLevel> for CommandBufferLevel {
 }
 
 /// Wraps a Vulkan command buffer
+#[derive(Clone)]
 pub struct CommandBuffer {
     /// Which state the command buffer is in currently, determines what the command buffer can be
     /// used for and what methods can be used
